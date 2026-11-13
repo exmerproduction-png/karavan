@@ -591,7 +591,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v7</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v8</p>
     </footer>
 </div>
 
@@ -609,6 +609,8 @@ var NTFY_URL = 'https://ntfy.sh';
 var NTFY_TOPIC = 'karavan-voda-51bb6b-live';
 var blobId = jGet('blobId', null);
 var FB_DB = 'https://karavanvoda-default-rtdb.firebaseio.com';
+var FB_KEY = 'AIzaSyADH-y1RNjoQ_XYCgQxG8-_97oxZqS341w';
+var fbTok = jGet('fbTok', null), fbRef = jGet('fbRef', null), fbTokExp = 0;
 
 
 var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{}};
@@ -660,6 +662,12 @@ function ensureBlob(cb){
     }).catch(function(){if(cb)cb(false)});
 }
 function fbUrl(){return FB_DB.replace(/\/$/,'')}
+function fbAuthSuffix(){return fbTok?'&auth='+encodeURIComponent(fbTok):''}
+function fbWriteSuffix(){return fbTok?'?auth='+encodeURIComponent(fbTok):''}
+function fbSaveTok(j){fbTok=j.idToken||j.id_token;fbRef=j.refreshToken||j.refresh_token;fbTokExp=Date.now()+((parseInt(j.expiresIn||j.expires_in,10)||3600)-5)*1000;lsSet('fbTok',JSON.stringify(fbTok));lsSet('fbRef',JSON.stringify(fbRef));return fbTok}
+function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},10000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error((j.error&&j.error.message)||'auth');return fbSaveTok(j)})}
+function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},10000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)})}
+function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);if(fbTok&&fbRef)return fbRefreshTok().catch(function(){return fbSignup()});return fbSignup()}
 function cloudLoad(cb){
     showSync(true);
     var done=false;
@@ -672,7 +680,7 @@ function cloudLoad(cb){
         if(txt&&txt.trim()){try{finish(JSON.parse(txt),true);fetchRegistry(function(){});return}catch(e){}}
         tryBlob();
     }).catch(function(){tryBlob()});}
-    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now()+fbAuthSuffix(),{},8000).then(function(r){return r.text()}).then(function(txt){
         if(txt&&txt.trim()&&txt.trim()!=='null'){try{finish(JSON.parse(txt),true);return}catch(e){}}
         tryText();
     }).catch(function(){tryText()});}
@@ -696,7 +704,7 @@ function doSave(){
         return JSON.stringify(merged);
     }).catch(function(){return payload}).then(function(finalPayload){
         var writes=[];
-        if(FB_DB)writes.push(fetchT(fbUrl()+'/db.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
+        if(FB_DB)writes.push(fetchT(fbUrl()+'/db.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
         writes.push(fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000));
         if(blobId)writes.push(fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
         else writes.push(new Promise(function(res){ensureBlob(function(ok){if(ok){fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000).then(function(r){res(r)}).catch(function(){res(null)})}else res(null)})}));
@@ -717,7 +725,7 @@ var pollFail=0;
 function applyRemote(f){if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}
 function pollOnce(){if(saving)return;function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f)}
     function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;done(txt)}).catch(function(){pollFail++;if(blobId){fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(done).catch(function(){})}})}
-    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){tryText()})}else tryText();}
+    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now()+fbAuthSuffix(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){tryText()})}else tryText();}
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
 var liveSrc=null;
 function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
@@ -795,13 +803,14 @@ document.addEventListener('DOMContentLoaded',function(){
     CU=jGet('CU',null);cart=jGet('cart',[]);if(!Array.isArray(cart))cart=[];
     if(lsGet('darkTheme')==='1'){document.body.classList.add('dark');document.getElementById('themeBtn').textContent='☀️'}
     fetchGeo();
-    cloudLoad(function(){
+    fbAuthInit().catch(function(){}).then(function(){cloudLoad(function(){
         if(CU){var f=findUserById(CU.id);if(f){CU=f;lsSet('CU',JSON.stringify(CU));}}
         setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},600)}},1500);
         refreshAll();startPolling();startLive();publishPresence();
         setInterval(publishPresence,10000);
         window.addEventListener('focus',function(){if(CU)publishPresence()});
-    });
+        setInterval(function(){if(FB_KEY&&fbRef&&(!fbTok||fbTokExp<Date.now()+300000))fbRefreshTok().catch(fbSignup)},60000);
+    });});
     renderCarousel();
     setInterval(function(){showLightning();},30000);
 });
