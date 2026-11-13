@@ -262,6 +262,22 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 .rating-gauge svg{width:120px;height:70px}
 .rating-gauge .val{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:18px;font-weight:900}
 .review-q{background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin:10px 0;font-size:13px;font-weight:600}
+/* Современные списки админки */
+.list-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(2,132,199,.06);transition:var(--transition)}
+.list-item:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(2,132,199,.12)}
+.list-ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden}
+.list-ico img{width:100%;height:100%;object-fit:cover}
+.li-blue{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(6,182,212,.15))}
+.li-gold{background:linear-gradient(135deg,rgba(251,191,36,.22),rgba(245,158,11,.22))}
+.li-red{background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(220,38,38,.12))}
+.list-main{flex:1;min-width:0}
+.list-title{font-weight:700;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-sub{font-size:11px;color:var(--text-secondary);margin-top:2px}
+.pct-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;flex-shrink:0}
+.chip-gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.chip-blue{background:linear-gradient(135deg,var(--primary),var(--secondary))}
+.del-x{width:32px;height:32px;border:none;border-radius:10px;background:rgba(239,68,68,.12);color:var(--danger);font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;transition:var(--transition)}
+.del-x:hover{background:var(--danger);color:#fff}
 /* ЧАТ V2: современные бейджи ролей, галочки, видео */
 .role-chip{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;line-height:1.4}
 .role-chip.rc-creator{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
@@ -331,7 +347,6 @@ body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
         <button onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
         <button onclick="showPage('chats')"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
-        <button onclick="showPage('map')"><span class="nav-icon">🗺️</span><span class="nav-label">Карта</span></button>
         <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
     </div>
 
@@ -498,15 +513,6 @@ body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
     </div>
 
 
-    <div id="map" class="page">
-        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
-        <h2>🗺️ Карта доставок</h2>
-        <div class="info-block"><p>📍 Мы доставляем воду по всему Дербенту — от Жилгородка до Мамедкалы</p></div>
-        <iframe src="https://yandex.ru/map-widget/v1/?ll=48.2905%2C42.0678&z=12&l=map" width="100%" height="320" frameborder="0" allowfullscreen="true" style="border:0;border-radius:12px" loading="lazy"></iframe>
-        <a href="https://yandex.ru/maps/977/derbent/?ll=48.2905%2C42.0678&z=12" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none;margin-top:10px">🗺️ Открыть в Яндекс.Картах</a>
-    </div>
-
-
     <div id="about" class="page">
         <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
         <h2>О компании</h2>
@@ -621,7 +627,7 @@ body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v10</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v11</p>
     </footer>
 </div>
 
@@ -1051,7 +1057,7 @@ function resetStat(k){if(!DB.statsOffset)DB.statsOffset={};if(!DB.statsOffsetTs)
 function loadAdmin(){function el(id,v){var e=document.getElementById(id);if(e)e.textContent=v}var off=DB.statsOffset||{};el('statOrders',Math.max(0,statValue('orders')-(off.orders||0)));el('statUsers',Math.max(0,statValue('users')-(off.users||0)));el('statRevenue',Math.max(0,statValue('revenue')-(off.revenue||0))+'₽');el('statPending',Math.max(0,statValue('pending')-(off.pending||0)));}
 function addProduct(){var n=document.getElementById('npName').value.trim(),p=parseInt(document.getElementById('npPrice').value,10),img=document.getElementById('npImg').value.trim(),d=document.getElementById('npDesc').value.trim(),b=document.getElementById('npBottle').value==='yes';if(!n||!p){toast('','Название и цена обязательны','error');return}if(!DB.customProducts)DB.customProducts=[];DB.customProducts.push({id:'custom_'+Date.now(),name:n,price:p,isBottle:b,img:img,desc:d||'Товар'});document.getElementById('npName').value='';document.getElementById('npPrice').value='';document.getElementById('npImg').value='';document.getElementById('npDesc').value='';cloudSave(function(){toast('🛒','Товар добавлен','success');renderAdminProducts();renderCarousel();renderDiscounts();})}
 function deleteProduct(id){tomb('prod',id);DB.customProducts=(DB.customProducts||[]).filter(function(p){return p.id!==id});cloudSave(function(){toast('','Удалено','info');renderAdminProducts();renderCarousel();renderDiscounts();})}
-function renderAdminProducts(){var c=document.getElementById('adminProducts');if(!c)return;var cp=DB.customProducts||[];if(!cp.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Доп. товаров нет — есть 5 базовых</p>';return}c.innerHTML=cp.map(function(p){return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px">📦 '+escHtml(p.name)+' — '+p.price+'₽</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deleteProduct(\''+p.id+'\')">✕</button></div>'}).join('');}
+function renderAdminProducts(){var c=document.getElementById('adminProducts');if(!c)return;var cp=DB.customProducts||[];if(!cp.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Доп. товаров нет — есть 5 базовых</p>';return}c.innerHTML=cp.map(function(p){return '<div class="list-item"><div class="list-ico li-blue">'+(p.img?'<img src="'+p.img+'" alt="">':'📦')+'</div><div class="list-main"><div class="list-title">'+escHtml(p.name)+'</div><div class="list-sub">'+escHtml(p.desc||'доп. товар')+'</div></div><span class="pct-chip chip-blue">'+p.price+'₽</span><button class="del-x" onclick="deleteProduct(\''+p.id+'\')">✕</button></div>'}).join('');}
 function loadAdminOrders(){
     var c=document.getElementById('adminOrders');if(!c)return;
     if(!DB.orders.length){c.innerHTML='<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Нет заказов</div></div>';return}
@@ -1085,14 +1091,14 @@ function declineBonusReq(rid){var r=null;for(var i=0;i<DB.bonusRequests.length;i
 
 function muteUser(){var uid=document.getElementById('muteUserId').value.trim(),reason=document.getElementById('muteReason').value.trim();if(!uid){toast('','Введите ID','error');return}var u=findUserByUid(uid);if(!u){toast('','Не найден','error');return}var fv=(document.getElementById('muteFrom')||{}).value,hours=parseInt((document.getElementById('muteHours')||{}).value,10)||24;var fromTs=fv?new Date(fv).getTime():Date.now();var untilTs=fromTs+hours*3600000;if(!DB.muted)DB.muted={};untomb('muted',u.id);DB.muted[u.id]={reason:reason||'Нарушение правил',from:fromTs,until:untilTs,_ts:Date.now()};pushNotif(u.id,'🔇 Вы заглушены',(reason||'')+' до '+new Date(untilTs).toLocaleString('ru-RU'),'warning');cloudSave(function(){toast('🔇',safeName(u)+' заглушен на '+hours+'ч','success');renderMuted();})}
 function unmuteUser(){var uid=document.getElementById('muteUserId').value.trim();if(!uid){toast('','Введите ID','error');return}var u=findUserByUid(uid);if(!u){toast('','Не найден','error');return}if(DB.muted)delete DB.muted[u.id];tomb('muted',u.id);pushNotif(u.id,'🔊 Заглушка снята','','success');cloudSave(function(){toast('🔊','Снято','success');renderMuted();})}
-function renderMuted(){var c=document.getElementById('mutedList');if(!c)return;var m=DB.muted||{},ids=Object.keys(m);if(!ids.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:12px">Нет заглушенных</p>';return}c.innerHTML=ids.map(function(id){var u=findUserById(+id),mm=m[id];return u?'<div style="font-size:12px;padding:6px;background:var(--bg);border-radius:8px;margin-bottom:4px">'+escHtml(safeName(u))+' — '+escHtml(mm.reason)+' (до '+(mm.until?new Date(mm.until).toLocaleString('ru-RU'):'∞')+')</div>':'';}).join('');}
+function renderMuted(){var c=document.getElementById('mutedList');if(!c)return;var m=DB.muted||{},ids=Object.keys(m);if(!ids.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:12px">Нет заглушенных</p>';return}c.innerHTML=ids.map(function(id){var u=findUserById(+id),mm=m[id];return u?'<div class="list-item"><div class="list-ico li-red">🔇</div><div class="list-main"><div class="list-title">'+escHtml(safeName(u))+'</div><div class="list-sub">'+escHtml(mm.reason||'')+' · до '+(mm.until?new Date(mm.until).toLocaleString('ru-RU'):'∞')+'</div></div></div>':'';}).join('');}
 
 
-function renderDiscounts(){var c=document.getElementById('discountList');if(!c)return;var sel=document.getElementById('discountProduct');if(sel){var cur=sel.value;sel.innerHTML=allProducts().map(function(p){return '<option value="'+p.id+'">'+escHtml(p.name)+'</option>'}).join('');if(cur)sel.value=cur;}var d=DB.discounts||{},keys=Object.keys(d);c.innerHTML=(keys.length?keys.map(function(k){var p=prodById(k);return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px">'+p.icon+' '+escHtml(p.name)+' −'+d[k]+'%</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="removeDiscount(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет скидок</p>')}
+function renderDiscounts(){var c=document.getElementById('discountList');if(!c)return;var sel=document.getElementById('discountProduct');if(sel){var cur=sel.value;sel.innerHTML=allProducts().map(function(p){return '<option value="'+p.id+'">'+escHtml(p.name)+'</option>'}).join('');if(cur)sel.value=cur;}var d=DB.discounts||{},keys=Object.keys(d);c.innerHTML=(keys.length?keys.map(function(k){var p=prodById(k);return'<div class="list-item"><div class="list-ico li-red">'+(p.img?'<img src="'+p.img+'" alt="">':'🏷️')+'</div><div class="list-main"><div class="list-title">'+escHtml(p.name)+'</div><div class="list-sub">скидка на товар</div></div><span class="pct-chip">−'+d[k]+'%</span><button class="del-x" onclick="removeDiscount(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет скидок</p>')}
 function applyDiscount(){var id=document.getElementById('discountProduct').value,pct=parseInt(document.getElementById('discountPct').value,10);if(!pct||pct<1||pct>99){toast('','Скидка 1-99%','error');return}if(!DB.discounts)DB.discounts={};untomb('disc',id);DB.discounts[id]=pct;cloudSave(function(){toast('🏷️','Скидка применена','success');renderDiscounts();renderCarousel();document.getElementById('discountPct').value='';})}
 function removeDiscount(k){tomb('disc',k);delete DB.discounts[k];cloudSave(function(){renderDiscounts();renderCarousel();})}
 function removeAllDiscounts(){Object.keys(DB.discounts||{}).forEach(function(k){tomb('disc',k)});DB.discounts={};cloudSave(function(){renderDiscounts();renderCarousel();})}
-function renderPromoList(){var c=document.getElementById('promoList');if(!c)return;var p=DB.promos||{},keys=Object.keys(p);c.innerHTML=(keys.length?keys.map(function(k){return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px"><strong>'+k+'</strong> — '+p[k].discount+(p[k].type==='percent'?'%':'₽')+'</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deletePromo(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет промокодов</p>')}
+function renderPromoList(){var c=document.getElementById('promoList');if(!c)return;var p=DB.promos||{},keys=Object.keys(p);c.innerHTML=(keys.length?keys.map(function(k){return'<div class="list-item"><div class="list-ico li-gold">🎟️</div><div class="list-main"><div class="list-title">'+escHtml(k)+'</div><div class="list-sub">'+(p[k].type==='percent'?'процент от суммы':'фиксированная сумма')+'</div></div><span class="pct-chip chip-gold">-'+p[k].discount+(p[k].type==='percent'?'%':'₽')+'</span><button class="del-x" onclick="deletePromo(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет промокодов</p>')}
 function createPromo(){var code=document.getElementById('newPromoCode').value.trim().toUpperCase(),val=parseInt(document.getElementById('newPromoValue').value,10),type=document.getElementById('newPromoType').value;if(!code||!val){toast('','Заполните','error');return}if(!DB.promos)DB.promos={};untomb('promo',code);DB.promos[code]={discount:val,type:type,_ts:Date.now()};cloudSave(function(){toast('🎟️',code+' создан','success');renderPromoList();document.getElementById('newPromoCode').value='';document.getElementById('newPromoValue').value='';})}
 function deletePromo(code){tomb('promo',code);delete DB.promos[code];cloudSave(function(){renderPromoList();})}
 function populateWaybillSelects(){var cs=document.getElementById('wbClient'),cr=document.getElementById('wbCourier');if(!cs||!cr)return;cs.innerHTML='<option value="">—</option>'+DB.users.map(function(u){return'<option value="'+u.id+'">'+escHtml(safeName(u))+' ('+u.uid+')</option>'}).join('');cr.innerHTML='<option value="">—</option>'+DB.users.filter(function(u){return roleOf(u)==='worker'}).map(function(u){return'<option value="'+u.id+'">'+escHtml(safeName(u))+'</option>'}).join('');}
