@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="color-scheme" content="light dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>КАРАВАН - Доставка воды</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -566,7 +568,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · ☁️ Данные в облаке</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v3</p>
     </footer>
 </div>
 
@@ -591,7 +593,7 @@ var PRODUCTS=[
     {id:'bottle_repeat',name:'Замена бутыли 19л',price:150,isBottle:true,img:'https://static.tildacdn.com/tild3135-6162-4634-a330-656539393762/001.png',desc:'Замена пустой бутыли на полную'},
     {id:'pump_mech',name:'Помпа механическая',price:400,isBottle:false,img:'https://static.tildacdn.com/tild6632-3538-4031-a664-353438393363/002.png',desc:'Механическая помпа для бутыли'},
     {id:'pump_elec',name:'Помпа электронная',price:500,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Электронная помпа с кнопкой'},
-    {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'',desc:'Премиальная помпа VIP'}
+    {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Премиальная помпа VIP'}
 ];
 function prodById(id){for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id===id)return PRODUCTS[i]}return PRODUCTS[0]}
 
@@ -660,7 +662,14 @@ function doSave(){
 }
 var pollTimer=null;
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}).catch(function(){});setOnlinePill();},3000);}
-function ensureCreator(){var cp=normPhone(CREATOR.phone),found=false;for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;break;}}if(!found)DB.users.push({id:1000000001,uid:'creator00001',name:CREATOR.name,phone:CREATOR.phone,email:CREATOR.email,birthDate:CREATOR.birthDate,password:'creator',role:'creator',createdAt:new Date().toISOString(),rating:0});}
+function ensureCreator(){
+    var cp=normPhone(CREATOR.phone),found=false;
+    for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
+    if(!found)DB.users.push({id:1000000001,uid:'creator00001',name:CREATOR.name,phone:CREATOR.phone,email:CREATOR.email,birthDate:CREATOR.birthDate,password:'creator',role:'creator',createdAt:new Date().toISOString(),rating:0});
+    var seen={};
+    for(var j=0;j<DB.users.length;j++){var np=normPhone(DB.users[j].phone);if(np&&seen[np]){DB.users.splice(j,1);j--;}else if(np){seen[np]=1;}}
+    if(CU){var cu2=findUserById(CU.id);if(cu2){CU=cu2;}else{var cu3=findUserByPhone(CU.phone);if(cu3){CU=cu3;}lsSet('CU',JSON.stringify(CU));}}
+}
 function cleanExpired(){
     var now=Date.now();
     if(DB.announcements){DB.announcements=DB.announcements.filter(function(a){return !a.endTs || a.endTs>now;});}
@@ -966,7 +975,7 @@ function lastSeenText(uid){if(isOnlineUser(uid))return'в сети';var p=DB.pre
 var chatSearchTimer;
 function handleChatSearch(){clearTimeout(chatSearchTimer);chatSearchTimer=setTimeout(doChatSearch,300)}
 function doChatSearch(){var input=document.getElementById('chatSearch');if(!input)return;var q=input.value.toLowerCase().trim(),r=document.getElementById('chatSearchResult');if(!r)return;if(!q){r.innerHTML='';return}var res=DB.users.filter(function(u){return u.id!==CU.id&&(safeName(u).toLowerCase().indexOf(q)!==-1||String(u.uid||'').indexOf(q)!==-1)});if(!res.length){r.innerHTML='<div class="info-block danger">❌ Не найдено</div>';return}r.innerHTML='<h3>Найдены</h3>'+res.slice(0,10).map(function(u){var gold=isCreator(u);return'<div class="user-list-item" onclick="openChat('+u.id+')"><div class="user-avatar'+(gold?' gold':'')+'">'+initialOf(u)+'</div><div style="flex:1"><div class="user-info-name">'+roleIcon(roleOf(u))+' '+escHtml(safeName(u))+'</div><div class="user-info-id">ID: '+u.uid+'</div></div></div>'}).join('');}
-function openChat(userId){var partner=findUserById(userId);if(!partner||!CU)return;var cid=getChatId(CU.id,userId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var msgs=DB.chats[cid];msgs.forEach(function(m){if(m.toId===CU.id)m.read=true});cloudSave();var gold=isCreator(partner);var ov=document.createElement('div');ov.className='modal-overlay';ov.id='chatOverlay';ov.dataset.partner=userId;ov.innerHTML='<div class="modal" style="max-height:92vh;padding:18px"><div class="modal-header"><div><div class="modal-title">💬 '+escHtml(safeName(partner))+' '+(gold?'👑':'')+'</div><div style="font-size:11px;color:var(--text-secondary)">ID: '+partner.uid+' · '+lastSeenText(userId)+'</div></div><button class="modal-close" onclick="closeChat()">✕</button></div><div class="chat-messages" id="chatMsgs">'+renderMsgs(msgs)+'</div><div class="chat-input-row"><button class="chat-btn photo" onclick="attachPhoto('+userId+')">📷</button><input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key===\'Enter\')sendMsg('+userId+')"><button class="chat-btn" onclick="sendMsg('+userId+')">➤</button></div><input type="file" id="photoInput" accept="image/*" style="display:none"></div>';document.body.appendChild(ov);var mb=document.getElementById('chatMsgs');if(mb)mb.scrollTop=mb.scrollHeight;}
+function openChat(userId){if(CU&&userId===CU.id){toast('🐫','Это вы — выберите другого человека','info');return}var partner=findUserById(userId);if(!partner||!CU)return;var cid=getChatId(CU.id,userId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var msgs=DB.chats[cid];msgs.forEach(function(m){if(m.toId===CU.id)m.read=true});cloudSave();var gold=isCreator(partner);var ov=document.createElement('div');ov.className='modal-overlay';ov.id='chatOverlay';ov.dataset.partner=userId;ov.innerHTML='<div class="modal" style="max-height:92vh;padding:18px"><div class="modal-header"><div><div class="modal-title">💬 '+escHtml(safeName(partner))+' '+(gold?'👑':'')+'</div><div style="font-size:11px;color:var(--text-secondary)">ID: '+partner.uid+' · '+lastSeenText(userId)+'</div></div><button class="modal-close" onclick="closeChat()">✕</button></div><div class="chat-messages" id="chatMsgs">'+renderMsgs(msgs)+'</div><div class="chat-input-row"><button class="chat-btn photo" onclick="attachPhoto('+userId+')">📷</button><input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key===\'Enter\')sendMsg('+userId+')"><button class="chat-btn" onclick="sendMsg('+userId+')">➤</button></div><input type="file" id="photoInput" accept="image/*" style="display:none"></div>';document.body.appendChild(ov);var mb=document.getElementById('chatMsgs');if(mb)mb.scrollTop=mb.scrollHeight;}
 function renderMsgs(msgs){if(!msgs||!msgs.length)return'<div style="text-align:center;color:var(--text-secondary);font-size:13px;margin:auto">💬 Начните общение</div>';return msgs.map(function(m){var own=m.fromId===CU.id,t=new Date(m.time).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});return'<div class="chat-message '+(own?'own':'other')+'">'+(!own?'<div class="msg-sender">'+escHtml(m.fromName||'?')+'</div>':'')+'<div class="msg-bubble">'+(m.img?'<img src="'+m.img+'" style="max-width:200px;border-radius:10px">':escHtml(m.text||''))+'</div><div class="msg-time">'+t+'</div></div>'}).join('')}
 function sendMsg(toId,text,img){var inp=document.getElementById('chatInput');text=text||(inp?inp.value.trim():'');if((!text&&!img)||!CU)return;var cid=getChatId(CU.id,toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];DB.chats[cid].push({id:Date.now()+'_'+Math.random().toString(16).slice(2,6),fromId:CU.id,fromName:CU.name,toId:toId,text:text||'',img:img||null,time:new Date().toISOString(),read:false});cloudSave();if(inp)inp.value='';var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight;}}
 function processImage(file,cb){var r=new FileReader();r.onload=function(ev){var img=new Image();img.onload=function(){var max=900,w=img.width,h=img.height,k=Math.min(1,max/Math.max(w,h));var cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);cb(cv.toDataURL('image/jpeg',.7))};img.src=ev.target.result};r.readAsDataURL(file)}
