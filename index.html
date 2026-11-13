@@ -307,6 +307,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
         <button onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
         <button onclick="showPage('chats')"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
+        <button onclick="showPage('map')"><span class="nav-icon">🗺️</span><span class="nav-label">Карта</span></button>
         <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
     </div>
 
@@ -467,6 +468,15 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
     </div>
 
 
+    <div id="map" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>🗺️ Карта доставок</h2>
+        <div class="info-block"><p>📍 Мы доставляем воду по всему Дербенту — от Жилгородка до Мамедкалы</p></div>
+        <iframe src="https://yandex.ru/map-widget/v1/?ll=48.2905%2C42.0678&z=12&l=map" width="100%" height="320" frameborder="0" allowfullscreen="true" style="border:0;border-radius:12px" loading="lazy"></iframe>
+        <a href="https://yandex.ru/maps/977/derbent/?ll=48.2905%2C42.0678&z=12" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none;margin-top:10px">🗺️ Открыть в Яндекс.Картах</a>
+    </div>
+
+
     <div id="about" class="page">
         <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
         <h2>О компании</h2>
@@ -511,17 +521,20 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
                 <div class="stat-card"><div class="stat-value" id="statUsers">0</div><div class="stat-label">Людей</div></div>
                 <div class="stat-card"><div class="stat-value" id="statRevenue">0₽</div><div class="stat-label">Доход</div></div>
                 <div class="stat-card"><div class="stat-value" id="statPending">0</div><div class="stat-label">Ожидают</div></div>
+                <div style="grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('orders')">⟲ Заказы</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('users')">⟲ Люди</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('revenue')">⟲ Доход</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('pending')">⟲ Ожидают</button>
+                </div>
             </div></div>
         </div>
         <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">📦 Заказы <span class="collapsible-arrow">▼</span></div><div class="collapsible-content"><div id="adminOrders"></div></div></div>
         <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🗺️ Карта доставок <span class="collapsible-arrow">▼</span></div>
             <div class="collapsible-content">
                 <div class="info-block"><p>📍 Отслеживание курьеров на карте г. Дербент</p></div>
-                <div style="background:#dbeafe;border-radius:12px;padding:20px;text-align:center;min-height:200px">
-                    <div style="font-size:60px;margin-bottom:10px">🗺️</div>
-                    <p style="color:#1e40af;font-weight:700">Карта г. Дербент</p>
-                    <div id="courierPins" style="margin-top:15px"></div>
-                </div>
+                <iframe src="https://yandex.ru/map-widget/v1/?ll=48.2905%2C42.0678&z=12&l=map" width="100%" height="300" frameborder="0" allowfullscreen="true" style="border:0;border-radius:12px" loading="lazy"></iframe>
+                <div id="courierPins" style="margin-top:15px"></div>
                 <a href="https://yandex.ru/maps/?text=Дербент" target="_blank" class="btn btn-primary btn-sm" style="margin-top:10px;text-decoration:none">🗺️ Открыть Яндекс.Карты</a>
             </div>
         </div>
@@ -534,6 +547,16 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
                 <div class="form-row"><div class="form-group"><label>📅 Начать с</label><input type="datetime-local" id="muteFrom"></div><div class="form-group"><label>⏱️ Длительность (часов)</label><input type="number" id="muteHours" value="24" min="1"></div></div>
                 <div class="btn-row"><button class="btn btn-danger btn-sm" onclick="muteUser()">🔇 Заглушить</button><button class="btn btn-success btn-sm" onclick="unmuteUser()">🔊 Снять</button></div>
                 <div id="mutedList" style="margin-top:10px"></div>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🛒 Товары <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div id="adminProducts"></div>
+                <div class="form-group"><label>Название</label><input id="npName" placeholder="Вода 5л"></div>
+                <div class="form-row"><div class="form-group"><label>Цена ₽</label><input type="number" id="npPrice" min="1" placeholder="200"></div><div class="form-group"><label>Это бутыль?</label><select id="npBottle"><option value="no">Нет</option><option value="yes">Да</option></select></div></div>
+                <div class="form-group"><label>Фото (ссылка, необязательно)</label><input id="npImg" placeholder="https://..."></div>
+                <div class="form-group"><label>Описание</label><input id="npDesc" placeholder="Описание товара"></div>
+                <button class="btn btn-primary btn-sm" onclick="addProduct()">➕ Добавить товар</button>
             </div>
         </div>
         <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🏷️ Скидки <span class="collapsible-arrow">▼</span></div>
@@ -585,9 +608,10 @@ var BLOB_API = 'https://jsonblob.com/api/jsonBlob';
 var NTFY_URL = 'https://ntfy.sh';
 var NTFY_TOPIC = 'karavan-voda-51bb6b-live';
 var blobId = jGet('blobId', null);
+var FB_DB = '';
 
 
-var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{}};
+var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{}};
 var cloudReady=false, saving=false, lastSaved=0, saveQueue=[];
 var CU=null, cart=[], selIdx=0, appliedPromo=null, selectedPayment='card', myGeo=null, myIP=null;
 
@@ -600,7 +624,8 @@ var PRODUCTS=[
     {id:'pump_elec',name:'Помпа электронная',price:500,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Электронная помпа с кнопкой'},
     {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Премиальная помпа VIP'}
 ];
-function prodById(id){for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id===id)return PRODUCTS[i]}return PRODUCTS[0]}
+function allProducts(){return PRODUCTS.concat(DB.customProducts||[])}
+function prodById(id){var a=allProducts();for(var i=0;i<a.length;i++){if(a[i].id===id)return a[i]}return a[0]}
 
 
 var CREATOR = {phone:'+79634296614', name:'Эльдар', email:'exmerproduction@gmail.com', birthDate:'24.08.2006', role:'creator'};
@@ -615,7 +640,7 @@ function isAdmin(u){var r=roleOf(u);return r==='admin'||r==='creator'}
 function showSync(on){var b=document.getElementById('syncBadge');if(b)b.classList.toggle('show',!!on)}
 function setOnlinePill(){var t=document.getElementById('onlineText');if(!t)return;var cnt=countOnline();t.textContent='Онлайн 🟢 '+cnt+' '+(cnt===1?'человек':(cnt>=2&&cnt<=4?'человека':'людей'));}
 function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<60000)c++;}return c;}
-function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{}}}
+function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{},customProducts:Array.isArray(r.customProducts)?r.customProducts:[],statsOffset:r.statsOffset&&typeof r.statsOffset==='object'?r.statsOffset:{}}}
 function fetchT(url,opt,tmo){opt=opt||{};tmo=tmo||8000;var c=new AbortController();var t=setTimeout(function(){try{c.abort()}catch(e){}},tmo);opt.signal=c.signal;return fetch(url,opt).then(function(r){clearTimeout(t);return r},function(e){clearTimeout(t);throw e})}
 function syncMerge(local,remote){
     var out=mergeDB(remote);
@@ -634,6 +659,7 @@ function ensureBlob(cb){
         if(r.ok&&loc){blobId=loc.split('/').pop();lsSet('blobId',blobId);fetchT(REG_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:blobId}).catch(function(){});if(cb)cb(true)}else if(cb)cb(false);
     }).catch(function(){if(cb)cb(false)});
 }
+function fbUrl(){return FB_DB.replace(/\/$/,'')}
 function cloudLoad(cb){
     showSync(true);
     var done=false;
@@ -642,10 +668,15 @@ function cloudLoad(cb){
         function read(){if(!blobId){finish(null,false);return}fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{finish(JSON.parse(t2),true);return}catch(e){}}finish(null,false)}).catch(function(){finish(null,false)})}
         if(blobId)read();else fetchRegistry(function(){read()});
     }
-    fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
+    function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
         if(txt&&txt.trim()){try{finish(JSON.parse(txt),true);fetchRegistry(function(){});return}catch(e){}}
         tryBlob();
-    }).catch(function(){tryBlob()});
+    }).catch(function(){tryBlob()});}
+    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        if(txt&&txt.trim()&&txt.trim()!=='null'){try{finish(JSON.parse(txt),true);return}catch(e){}}
+        tryText();
+    }).catch(function(){tryText()});}
+    else tryText();
 }
 function cloudSave(cb){
     saveQueue.push(cb);
@@ -664,7 +695,9 @@ function doSave(){
         DB=merged;
         return JSON.stringify(merged);
     }).catch(function(){return payload}).then(function(finalPayload){
-        var writes=[fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000)];
+        var writes=[];
+        if(FB_DB)writes.push(fetchT(fbUrl()+'/db.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
+        writes.push(fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000));
         if(blobId)writes.push(fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
         else writes.push(new Promise(function(res){ensureBlob(function(ok){if(ok){fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000).then(function(r){res(r)}).catch(function(){res(null)})}else res(null)})}));
         return Promise.allSettled(writes);
@@ -682,7 +715,9 @@ function doSave(){
 var pollTimer=null;
 var pollFail=0;
 function applyRemote(f){if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}
-function pollOnce(){if(saving)return;function done(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f)}fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;done(txt)}).catch(function(){pollFail++;if(blobId){fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(done).catch(function(){})}})}
+function pollOnce(){if(saving)return;function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f)}
+    function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;done(txt)}).catch(function(){pollFail++;if(blobId){fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(done).catch(function(){})}})}
+    if(FB_DB){fetchT(fbUrl()+'/db.json?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){tryText()})}else tryText();}
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
 var liveSrc=null;
 function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
@@ -733,7 +768,7 @@ function pad2(x){return String(x).length<2?'0'+x:String(x)}
 function normBirth(v){v=String(v||'').trim();var m=v.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4})$/);if(m){var d=+m[1],mo=+m[2];if(d>=1&&d<=31&&mo>=1&&mo<=12)return pad2(d)+'.'+pad2(mo)+'.'+m[3];return null}m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);if(m){var d2=+m[3],mo2=+m[2];if(d2>=1&&d2<=31&&mo2>=1&&mo2<=12)return pad2(d2)+'.'+pad2(mo2)+'.'+m[1];return null}return null}
 function genUIDRaw(){var c='abcdefghijklmnopqrstuvwxyz0123456789',u='';for(var i=0;i<12;i++)u+=c[Math.floor(Math.random()*c.length)];return u}
 function genUID(){var used=DB.users.map(function(x){return x.uid}),u;do{u=genUIDRaw()}while(used.indexOf(u)!==-1);return u}
-function getProdPrice(id){var base=0;for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id===id){base=PRODUCTS[i].price;break;}}var disc=DB.discounts&&DB.discounts[id];return disc?Math.round(base*(1-disc/100)):base}
+function getProdPrice(id){var p=prodById(id);var base=p?p.price:0;var disc=DB.discounts&&DB.discounts[id];return disc?Math.round(base*(1-disc/100)):base}
 function isMuted(u){if(!u||!DB.muted||!DB.muted[u.id])return false;var m=DB.muted[u.id];if(m.until&&m.until<Date.now())return false;if(m.from&&m.from>Date.now())return false;return true}
 function courierRating(uid){var revs=(DB.reviews||[]).filter(function(r){return r.courierUid===uid});if(!revs.length)return 0;var sum=0;revs.forEach(function(r){sum+=(r.stars||0)});var avg=sum/revs.length;return Math.min(10,avg*2);}
 function ratingColor(pct){if(pct>=7)return'#16a34a';if(pct>=4)return'#22c55e';if(pct>=2)return'#f59e0b';if(pct>0)return'#ef4444';return'#94a3b8';}
@@ -777,7 +812,7 @@ window.addEventListener('error',function(e){console.log('[КАРАВАН]',e&&e.
 function findUserById(id){for(var i=0;i<DB.users.length;i++){if(DB.users[i].id===id)return DB.users[i]}return null}
 function findUserByUid(uid){for(var i=0;i<DB.users.length;i++){if(DB.users[i].uid===uid)return DB.users[i]}return null}
 function findUserByPhone(ph){var np=normPhone(ph);for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===np)return DB.users[i]}return null}
-function refreshAll(){updateLoginStatus();updateProfileContent();renderCarousel();loadHistory();renderChats();updateOpenChat();renderPeople();renderAnnouncementsHome();renderAnnouncementsAdmin();showNotifDot();setOnlinePill();if(CU&&isAdmin(CU)){loadAdmin();loadAdminOrders();loadAdminUsers();renderPromoList();renderDiscounts();loadAdminChats();renderBonusRequests();renderMuted();updateCourierPins();renderComplaints();}}
+function refreshAll(){updateLoginStatus();updateProfileContent();renderCarousel();loadHistory();renderChats();updateOpenChat();renderPeople();renderAnnouncementsHome();renderAnnouncementsAdmin();showNotifDot();setOnlinePill();if(CU&&isAdmin(CU)){loadAdmin();loadAdminOrders();loadAdminUsers();renderPromoList();renderDiscounts();loadAdminChats();renderBonusRequests();renderMuted();updateCourierPins();renderComplaints();renderAdminProducts();}}
 
 
 /* ================= НАВИГАЦИЯ ================= */
@@ -790,8 +825,8 @@ function callPhone(){window.location.href='tel:+79640053282'}
 /* ================= КАРУСЕЛЬ ТОВАРОВ ================= */
 function renderCarousel(){
     var track=document.getElementById('productTrack');if(!track)return;
-    track.innerHTML=PRODUCTS.map(function(p,i){var pr=getProdPrice(p.id);var imgHtml=p.img?'<img class="product-big-img" src="'+p.img+'" alt="'+escHtml(p.name)+'" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"><div class="product-big-icon" style="display:none">'+(p.isBottle?'🫗':'💪')+'</div>':'<div class="product-big-icon">'+(p.isBottle?'🫗':'💪')+'</div>';return'<div class="product-slide"><div class="product-card-big '+(i===selIdx?'selected':'')+'" onclick="selectSlide('+i+')">'+imgHtml+'<div class="product-big-name">'+escHtml(p.name)+'</div><div class="product-big-desc">'+escHtml(p.desc)+'</div><div class="product-big-price">'+pr+'₽</div></div></div>'}).join('');
-    var dots=document.getElementById('carouselDots');if(dots)dots.innerHTML=PRODUCTS.map(function(p,i){return'<div class="carousel-dot '+(i===selIdx?'active':'')+'" onclick="selectSlide('+i+')"></div>'}).join('');
+    track.innerHTML=allProducts().map(function(p,i){var pr=getProdPrice(p.id);var imgHtml=p.img?'<img class="product-big-img" src="'+p.img+'" alt="'+escHtml(p.name)+'" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"><div class="product-big-icon" style="display:none">'+(p.isBottle?'🫗':'💪')+'</div>':'<div class="product-big-icon">'+(p.isBottle?'🫗':'💪')+'</div>';return'<div class="product-slide"><div class="product-card-big '+(i===selIdx?'selected':'')+'" onclick="selectSlide('+i+')">'+imgHtml+'<div class="product-big-name">'+escHtml(p.name)+'</div><div class="product-big-desc">'+escHtml(p.desc)+'</div><div class="product-big-price">'+pr+'₽</div></div></div>'}).join('');
+    var dots=document.getElementById('carouselDots');if(dots)dots.innerHTML=allProducts().map(function(p,i){return'<div class="carousel-dot '+(i===selIdx?'active':'')+'" onclick="selectSlide('+i+')"></div>'}).join('');
     updateCarouselPos();
     setupSwipe();
 }
@@ -956,7 +991,12 @@ function deleteAnn(id){DB.announcements=(DB.announcements||[]).filter(function(a
 
 
 /* ================= АДМИН ================= */
-function loadAdmin(){function el(id,v){var e=document.getElementById(id);if(e)e.textContent=v}el('statOrders',DB.orders.length);el('statUsers',DB.users.length);el('statRevenue',DB.orders.reduce(function(s,o){return s+(o.total||0)},0)+'₽');el('statPending',DB.orders.filter(function(o){return o.status==='pending'}).length);}
+function statValue(k){if(k==='orders')return DB.orders.length;if(k==='revenue')return DB.orders.reduce(function(s,o){return s+(o.total||0)},0);if(k==='users')return DB.users.length;if(k==='pending')return DB.orders.filter(function(o){return o.status==='pending'}).length;return 0}
+function resetStat(k){if(!DB.statsOffset)DB.statsOffset={};DB.statsOffset[k]=statValue(k);cloudSave(function(){toast('📊','Статистика сброшена','success');loadAdmin();})}
+function loadAdmin(){function el(id,v){var e=document.getElementById(id);if(e)e.textContent=v}var off=DB.statsOffset||{};el('statOrders',Math.max(0,statValue('orders')-(off.orders||0)));el('statUsers',Math.max(0,statValue('users')-(off.users||0)));el('statRevenue',Math.max(0,statValue('revenue')-(off.revenue||0))+'₽');el('statPending',Math.max(0,statValue('pending')-(off.pending||0)));}
+function addProduct(){var n=document.getElementById('npName').value.trim(),p=parseInt(document.getElementById('npPrice').value,10),img=document.getElementById('npImg').value.trim(),d=document.getElementById('npDesc').value.trim(),b=document.getElementById('npBottle').value==='yes';if(!n||!p){toast('','Название и цена обязательны','error');return}if(!DB.customProducts)DB.customProducts=[];DB.customProducts.push({id:'custom_'+Date.now(),name:n,price:p,isBottle:b,img:img,desc:d||'Товар'});document.getElementById('npName').value='';document.getElementById('npPrice').value='';document.getElementById('npImg').value='';document.getElementById('npDesc').value='';cloudSave(function(){toast('🛒','Товар добавлен','success');renderAdminProducts();renderCarousel();renderDiscounts();})}
+function deleteProduct(id){DB.customProducts=(DB.customProducts||[]).filter(function(p){return p.id!==id});cloudSave(function(){toast('','Удалено','info');renderAdminProducts();renderCarousel();renderDiscounts();})}
+function renderAdminProducts(){var c=document.getElementById('adminProducts');if(!c)return;var cp=DB.customProducts||[];if(!cp.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Доп. товаров нет — есть 5 базовых</p>';return}c.innerHTML=cp.map(function(p){return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px">📦 '+escHtml(p.name)+' — '+p.price+'₽</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deleteProduct(\''+p.id+'\')">✕</button></div>'}).join('');}
 function loadAdminOrders(){
     var c=document.getElementById('adminOrders');if(!c)return;
     if(!DB.orders.length){c.innerHTML='<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">Нет заказов</div></div>';return}
@@ -993,7 +1033,7 @@ function unmuteUser(){var uid=document.getElementById('muteUserId').value.trim()
 function renderMuted(){var c=document.getElementById('mutedList');if(!c)return;var m=DB.muted||{},ids=Object.keys(m);if(!ids.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:12px">Нет заглушенных</p>';return}c.innerHTML=ids.map(function(id){var u=findUserById(+id),mm=m[id];return u?'<div style="font-size:12px;padding:6px;background:var(--bg);border-radius:8px;margin-bottom:4px">'+escHtml(safeName(u))+' — '+escHtml(mm.reason)+' (до '+(mm.until?new Date(mm.until).toLocaleString('ru-RU'):'∞')+')</div>':'';}).join('');}
 
 
-function renderDiscounts(){var c=document.getElementById('discountList');if(!c)return;var d=DB.discounts||{},keys=Object.keys(d);c.innerHTML=(keys.length?keys.map(function(k){var p=prodById(k);return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px">'+p.icon+' '+escHtml(p.name)+' −'+d[k]+'%</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="removeDiscount(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет скидок</p>')}
+function renderDiscounts(){var c=document.getElementById('discountList');if(!c)return;var sel=document.getElementById('discountProduct');if(sel){var cur=sel.value;sel.innerHTML=allProducts().map(function(p){return '<option value="'+p.id+'">'+escHtml(p.name)+'</option>'}).join('');if(cur)sel.value=cur;}var d=DB.discounts||{},keys=Object.keys(d);c.innerHTML=(keys.length?keys.map(function(k){var p=prodById(k);return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)"><span style="flex:1;font-size:13px">'+p.icon+' '+escHtml(p.name)+' −'+d[k]+'%</span><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="removeDiscount(\''+k+'\')">✕</button></div>'}).join(''):'<p style="color:var(--text-secondary);font-size:13px">Нет скидок</p>')}
 function applyDiscount(){var id=document.getElementById('discountProduct').value,pct=parseInt(document.getElementById('discountPct').value,10);if(!pct||pct<1||pct>99){toast('','Скидка 1-99%','error');return}if(!DB.discounts)DB.discounts={};DB.discounts[id]=pct;cloudSave(function(){toast('🏷️','Скидка применена','success');renderDiscounts();renderCarousel();document.getElementById('discountPct').value='';})}
 function removeDiscount(k){delete DB.discounts[k];cloudSave(function(){renderDiscounts();renderCarousel();})}
 function removeAllDiscounts(){DB.discounts={};cloudSave(function(){renderDiscounts();renderCarousel();})}
@@ -1008,7 +1048,7 @@ function clearSig(){var c=document.getElementById('sigCanvas');if(c)c.getContext
 function saveSig(id){var c=document.getElementById('sigCanvas');if(!c)return;var t=document.getElementById(id);if(t)t.innerHTML='<img src="'+c.toDataURL()+'">';var m=c.closest('.modal-overlay');if(m)m.remove();}
 function loadAdminChats(){var c=document.getElementById('adminChats');if(!c)return;var chats=DB.chats||{},keys=Object.keys(chats);if(!keys.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Переписок нет</p>';return}c.innerHTML=keys.map(function(cid){var msgs=chats[cid]||[];var prev=msgs.slice(-5).map(function(m){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><strong>'+escHtml(m.fromName||'?')+'</strong>: '+escHtml(m.img?'📷 Фото':m.text||'')+'</div>'}).join('');return'<div class="user-admin-card"><div style="font-weight:700;font-size:12px;color:var(--primary)">Диалог '+cid+'</div>'+prev+'</div>';}).join('');}
 function renderComplaints(){var c=document.getElementById('adminComplaints');if(!c)return;var comp=(DB.complaints||[]).slice().reverse();if(!comp.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Жалоб нет</p>';return}c.innerHTML=comp.map(function(x){return'<div class="user-admin-card"><div style="font-weight:700;font-size:12px">⚠️ '+escHtml(x.from)+' → курьер '+escHtml(x.courierName)+'</div><div style="font-size:11px;color:var(--text-secondary)">Заказ '+x.orderNumber+' · '+x.date+'</div><p style="font-size:12px;margin-top:6px">'+escHtml(x.text)+'</p></div>'}).join('');}
-function clearAllData(){confirm2('УДАЛИТЬ ВСЮ ОБЛАЧНУЮ БАЗУ? Это затронет ВСЕ устройства!',function(){confirm2('Точно? Необратимо!',function(){DB={users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{}};lsDel('localOrders');cloudSave(function(){toast('✅','База очищена','success');refreshAll();});});})}
+function clearAllData(){confirm2('УДАЛИТЬ ВСЮ ОБЛАЧНУЮ БАЗУ? Это затронет ВСЕ устройства!',function(){confirm2('Точно? Необратимо!',function(){DB={users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{}};lsDel('localOrders');cloudSave(function(){toast('✅','База очищена','success');refreshAll();});});})}
 
 
 /* ================= ЧАТЫ ================= */
