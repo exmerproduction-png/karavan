@@ -568,7 +568,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v4</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v5</p>
     </footer>
 </div>
 
@@ -580,7 +580,11 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
    Вся база DB хранится одним JSON-документом по адресу DB_URL ниже.
    ===================================================================== */
 var DB_URL = 'https://textdb.dev/api/data/karavan-voda-db-7f3a9c2e';
-var KV_URL = 'https://kvdb.io/6gWvxvKvA6qmohodFprVKV/db';
+var REG_URL = 'https://textdb.dev/api/data/karavan-blob-reg-51bb6b';
+var BLOB_API = 'https://jsonblob.com/api/jsonBlob';
+var NTFY_URL = 'https://ntfy.sh';
+var NTFY_TOPIC = 'karavan-voda-51bb6b-live';
+var blobId = jGet('blobId', null);
 
 
 var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{}};
@@ -623,15 +627,25 @@ function syncMerge(local,remote){
     var ln=local._notifs||{};for(var u2 in ln){var la=Array.isArray(ln[u2])?ln[u2]:[],ra=Array.isArray(out._notifs[u2])?out._notifs[u2]:[];var seen2={},all2=ra.concat(la).filter(function(n){if(!n||!n.id||seen2[n.id])return false;seen2[n.id]=1;return true});all2.sort(function(a,b){return new Date(b.time)-new Date(a.time)});out._notifs[u2]=all2.slice(0,40);}
     return out;
 }
+function fetchRegistry(cb){fetchT(REG_URL+'?t='+Date.now(),{},5000).then(function(r){return r.text()}).then(function(t){var id=(t||'').trim();if(id&&id.length>8){blobId=id;lsSet('blobId',id);if(cb)cb(true)}else if(cb)cb(false)}).catch(function(){if(cb)cb(false)})}
+function ensureBlob(cb){
+    fetchT(BLOB_API,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(DB)},10000).then(function(r){
+        var loc=r.headers.get('Location')||r.headers.get('location');
+        if(r.ok&&loc){blobId=loc.split('/').pop();lsSet('blobId',blobId);fetchT(REG_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:blobId}).catch(function(){});if(cb)cb(true)}else if(cb)cb(false);
+    }).catch(function(){if(cb)cb(false)});
+}
 function cloudLoad(cb){
     showSync(true);
     var done=false;
     function finish(db,ok){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;}showSync(false);ensureCreator();if(cb)cb();if(!ok)cloudSave();}
-    function tryKv(ok){return fetchT(KV_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{finish(JSON.parse(t2),true);return}catch(e){}}finish(null,ok)}).catch(function(){finish(null,ok)});}
+    function tryBlob(){
+        function read(){if(!blobId){finish(null,false);return}fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{finish(JSON.parse(t2),true);return}catch(e){}}finish(null,false)}).catch(function(){finish(null,false)})}
+        if(blobId)read();else fetchRegistry(function(){read()});
+    }
     fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
-        if(txt&&txt.trim()){try{finish(JSON.parse(txt),true);return}catch(e){}}
-        return tryKv(false);
-    }).catch(function(){return tryKv(false)});
+        if(txt&&txt.trim()){try{finish(JSON.parse(txt),true);fetchRegistry(function(){});return}catch(e){}}
+        tryBlob();
+    }).catch(function(){tryBlob()});
 }
 function cloudSave(cb){
     saveQueue.push(cb);
@@ -650,16 +664,15 @@ function doSave(){
         DB=merged;
         return JSON.stringify(merged);
     }).catch(function(){return payload}).then(function(finalPayload){
-        return Promise.allSettled([
-            fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000),
-            fetchT(KV_URL+'?t='+Date.now(),{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000)
-        ]);
+        var writes=[fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000)];
+        if(blobId)writes.push(fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000));
+        else writes.push(new Promise(function(res){ensureBlob(function(ok){if(ok){fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:finalPayload},15000).then(function(r){res(r)}).catch(function(){res(null)})}else res(null)})}));
+        return Promise.allSettled(writes);
     }).then(function(res){
-        var ok1=res[0].status==='fulfilled'&&res[0].value&&res[0].value.ok;
-        var ok2=res[1].status==='fulfilled'&&res[1].value&&res[1].value.ok;
+        var ok=res.some(function(x){return x.status==='fulfilled'&&x.value&&x.value.ok});
         showSync(false);
         var cbs=saveQueue.slice();saveQueue=[];
-        if(ok1||ok2){offlineWarned=false;setOnlinePill();}
+        if(ok){offlineWarned=false;setOnlinePill();ntfyPublish({type:'refresh'});}
         else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📴','Нет связи с облаком — переподключаюсь…','warning');}setTimeout(function(){if(saving)return;doSave()},10000);}
         cbs.forEach(function(c){if(c)c();});
         saving=false;
@@ -669,7 +682,27 @@ function doSave(){
 var pollTimer=null;
 var pollFail=0;
 function applyRemote(f){if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}
-function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f);}).catch(function(){pollFail++;fetchT(KV_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f);}).catch(function(){});});setOnlinePill();},3000);}
+function pollOnce(){if(saving)return;function done(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f)}fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;done(txt)}).catch(function(){pollFail++;if(blobId){fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(done).catch(function(){})}})}
+function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
+var liveSrc=null;
+function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
+function startLive(){
+    if(liveSrc||!window.EventSource)return;
+    try{
+        liveSrc=new EventSource(NTFY_URL+'/'+NTFY_TOPIC+'/sse');
+        liveSrc.onmessage=function(ev){
+            try{
+                var d=JSON.parse(ev.data);if(!d||!d.message)return;var m;try{m=JSON.parse(d.message)}catch(e){return}
+                if(!CU)return;
+                if(m.type==='msg'&&m.toId===CU.id){
+                    pollOnce();
+                    var ov=document.getElementById('chatOverlay');
+                    if(!(ov&&parseInt(ov.dataset.partner,10)===m.fromId))toast('💬','Новое сообщение от '+(m.fromName||'?'),'info');
+                } else if(m.type==='refresh'){pollOnce();}
+            }catch(e){}
+        };
+    }catch(e){liveSrc=null}
+}
 function ensureCreator(){
     var cp=normPhone(CREATOR.phone),found=false;
     for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
@@ -730,7 +763,7 @@ document.addEventListener('DOMContentLoaded',function(){
     cloudLoad(function(){
         if(CU){var f=findUserById(CU.id);if(f){CU=f;lsSet('CU',JSON.stringify(CU));}}
         setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},600)}},1500);
-        refreshAll();startPolling();publishPresence();
+        refreshAll();startPolling();startLive();publishPresence();
         setInterval(publishPresence,10000);
         window.addEventListener('focus',function(){if(CU)publishPresence()});
     });
@@ -822,7 +855,7 @@ function toggleNotifs(){var p=document.getElementById('notifPanel');if(p.style.d
 function selectRole(r){if(r==='creator'){toast('','Статус недоступен','error');return}document.querySelectorAll('.role-option').forEach(function(o){o.classList.toggle('selected',o.dataset.role===r)});document.getElementById('regRole').value=r;}
 function showRegError(m){var e=document.getElementById('regError');if(e){e.style.display='block';e.innerHTML='❌ '+m}toast('Ошибка',m,'error')}
 function showLoginError(m){var e=document.getElementById('loginError');if(e){e.style.display='block';e.innerHTML='❌ '+m}toast('Ошибка',m,'error')}
-function register(){try{var errEl=document.getElementById('regError');if(errEl)errEl.style.display='none';var name=document.getElementById('regName').value.trim(),phone=normPhone(document.getElementById('regPhone').value),email=document.getElementById('regEmail').value.trim(),birth=normBirth(document.getElementById('regBirth').value),pass=document.getElementById('regPassword').value,role=document.getElementById('regRole').value,priv=document.getElementById('regPrivacy').checked;if(!name)return showRegError('Введите имя.');if(!phone)return showRegError('Телефон: 10-11 цифр.');if(email.indexOf('@')===-1)return showRegError('Некорректный email.');if(!birth)return showRegError('Дата рождения: ДД.ММ.ГГГГ.');if(pass.length<6)return showRegError('Пароль мин. 6 символов.');if(!priv)return showRegError('Нужно согласие.');if(role==='creator')role='client';if(findUserByPhone(phone))return showRegError('Телефон уже зарегистрирован.');var nu={id:Date.now(),uid:genUID(),name:name,phone:phone,email:email,birthDate:birth,password:pass,role:role,rating:0,createdAt:new Date().toISOString()};DB.users.push(nu);CU=nu;lsSet('CU',JSON.stringify(CU));cloudSave(function(){publishPresence();toast('🎉','Регистрация успешна!','success');showPage('profile');});}catch(e){showRegError('Ошибка: '+(e&&e.message||e))}}
+function register(){try{var errEl=document.getElementById('regError');if(errEl)errEl.style.display='none';var name=document.getElementById('regName').value.trim(),phone=normPhone(document.getElementById('regPhone').value),email=document.getElementById('regEmail').value.trim(),birth=normBirth(document.getElementById('regBirth').value),pass=document.getElementById('regPassword').value,role=document.getElementById('regRole').value,priv=document.getElementById('regPrivacy').checked;if(!name)return showRegError('Введите имя.');if(!phone)return showRegError('Телефон: 10-11 цифр.');if(email.indexOf('@')===-1)return showRegError('Некорректный email.');if(!birth)return showRegError('Дата рождения: ДД.ММ.ГГГГ.');if(pass.length<6)return showRegError('Пароль мин. 6 символов.');if(!priv)return showRegError('Нужно согласие.');if(role==='creator')role='client';if(findUserByPhone(phone))return showRegError('Телефон уже зарегистрирован.');var nu={id:Date.now(),uid:genUID(),name:name,phone:phone,email:email,birthDate:birth,password:pass,role:role,rating:0,createdAt:new Date().toISOString()};DB.users.push(nu);CU=nu;lsSet('CU',JSON.stringify(CU));DB.users.forEach(function(u){if(isAdmin(u)&&u.id!==nu.id)pushNotif(u.id,'🆕 Новый пользователь',safeName(nu)+' · '+(nu.phone||''),'info')});cloudSave(function(){publishPresence();toast('🎉','Регистрация успешна!','success');showPage('profile');});}catch(e){showRegError('Ошибка: '+(e&&e.message||e))}}
 function login(){try{var errEl=document.getElementById('loginError');if(errEl)errEl.style.display='none';var phone=normPhone(document.getElementById('loginPhone').value),pass=document.getElementById('loginPassword').value;if(!phone)return showLoginError('Телефон: 10-11 цифр.');if(!pass)return showLoginError('Введите пароль.');var u=findUserByPhone(phone);if(!u)return showLoginError('Аккаунт не найден.');if(!isCreator(u)&&u.password!==pass)return showLoginError('Неверный пароль.');CU=u;lsSet('CU',JSON.stringify(CU));publishPresence();toast('👋','С возвращением, '+safeName(u)+'!','success');showPage('profile');}catch(e){showLoginError('Ошибка: '+(e&&e.message||e))}}
 function logout(){if(CU&&DB.presence)delete DB.presence[CU.id];lsDel('CU');CU=null;cart=[];lsDel('cart');toast('','Вы вышли','info');showPage('home')}
 function loadEdit(){if(!CU)return;document.getElementById('editName').value=CU.name||'';document.getElementById('editEmail').value=CU.email||'';document.getElementById('editPassword').value='';var a=document.getElementById('editAvatar');if(a){a.textContent=initialOf(CU);a.className='edit-avatar'+(isCreator(CU)?' gold':'');}var bg=document.getElementById('editBirthGroup');if(bg){bg.style.display=isAdmin(CU)?'block':'none';var bi=document.getElementById('editBirth');if(bi)bi.value=CU.birthDate||'';}}
@@ -939,7 +972,7 @@ function loadAdminOrders(){
         '<div style="display:flex;gap:6px;margin-top:8px"><select id="cr_'+o.id+'" style="flex:1;padding:6px;border:2px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--text)"><option value="">— назначить курьера —</option>'+opts+'</select><button class="ua-btn" style="background:var(--success);color:#fff" onclick="assignCourier('+o.id+')">✓</button><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deleteOrder('+o.id+')">🗑</button></div></div>';
     }).join('');
 }
-function setStatus(id,s){var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===id){o=DB.orders[i];break}}if(o){o.status=s;if(s==='delivered'){pushNotif(o.userId,'✅ Доставлено','Заказ '+o.orderNumber+' доставлен. Оцените качество!','success');}cloudSave(function(){loadAdmin();loadAdminOrders();});}}
+function setStatus(id,s){var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===id){o=DB.orders[i];break}}if(o){o.status=s;if(s==='delivered'){pushNotif(o.userId,'✅ Доставлено','Заказ '+o.orderNumber+' доставлен. Оцените качество!','success');}if(s==='processing'){pushNotif(o.userId,'🚚 Заказ в доставке','Заказ '+o.orderNumber+' передан курьеру','info');}if(s==='cancelled'){pushNotif(o.userId,'❌ Заказ отменён','Заказ '+o.orderNumber+' отменён','warning');}cloudSave(function(){loadAdmin();loadAdminOrders();});}}
 function assignCourier(oid){var sel=document.getElementById('cr_'+oid);if(!sel)return;var cid=parseInt(sel.value,10);var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===oid){o=DB.orders[i];break}}if(!o)return;if(!cid){o.assignedCourier=null;o.courierName=null;o.courierUid=null}else{var u=findUserById(cid);if(!u)return;o.assignedCourier=cid;o.courierName=u.name;o.courierUid=u.uid;pushNotif(cid,'📦 Доставка назначена',o.orderNumber,'info');pushNotif(o.userId,'🚚 Курьер назначен','Ваш заказ повезёт '+safeName(u),'success');}cloudSave(function(){toast('🚚','Назначено','success');loadAdminOrders();updateCourierPins();})}
 function deleteOrder(id){confirm2('Удалить заказ?',function(){DB.orders=DB.orders.filter(function(o){return o.id!==id});var lo=jGet('localOrders',[]);lo=lo.filter(function(o){return o.id!==id});lsSet('localOrders',JSON.stringify(lo));cloudSave(function(){toast('','Удалено','info');loadAdmin();loadAdminOrders();});})}
 function updateCourierPins(){var pins=document.getElementById('courierPins');if(!pins)return;var act=DB.orders.filter(function(o){return o.assignedCourier&&o.status==='processing'});pins.innerHTML=act.length?act.map(function(o){return'<div style="display:inline-block;background:#fff;padding:8px 12px;border-radius:20px;margin:4px;color:#1e40af;font-size:12px">📍 '+escHtml(o.courierName||'?')+' → '+escHtml(safeStr(o.address&&o.address.street))+'</div>'}).join(''):'<p style="color:#1e40af">Нет активных доставок</p>';}
@@ -989,7 +1022,7 @@ function handleChatSearch(){clearTimeout(chatSearchTimer);chatSearchTimer=setTim
 function doChatSearch(){var input=document.getElementById('chatSearch');if(!input)return;var q=input.value.toLowerCase().trim(),r=document.getElementById('chatSearchResult');if(!r)return;if(!q){r.innerHTML='';return}var res=DB.users.filter(function(u){return u.id!==CU.id&&(safeName(u).toLowerCase().indexOf(q)!==-1||String(u.uid||'').indexOf(q)!==-1)});if(!res.length){r.innerHTML='<div class="info-block danger">❌ Не найдено</div>';return}r.innerHTML='<h3>Найдены</h3>'+res.slice(0,10).map(function(u){var gold=isCreator(u);return'<div class="user-list-item" onclick="openChat('+u.id+')"><div class="user-avatar'+(gold?' gold':'')+'">'+initialOf(u)+'</div><div style="flex:1"><div class="user-info-name">'+roleIcon(roleOf(u))+' '+escHtml(safeName(u))+'</div><div class="user-info-id">ID: '+u.uid+'</div></div></div>'}).join('');}
 function openChat(userId){if(CU&&userId===CU.id){toast('🐫','Это вы — выберите другого человека','info');return}var partner=findUserById(userId);if(!partner||!CU)return;var cid=getChatId(CU.id,userId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var msgs=DB.chats[cid];msgs.forEach(function(m){if(m.toId===CU.id)m.read=true});cloudSave();var gold=isCreator(partner);var ov=document.createElement('div');ov.className='modal-overlay';ov.id='chatOverlay';ov.dataset.partner=userId;ov.innerHTML='<div class="modal" style="max-height:92vh;padding:18px"><div class="modal-header"><div><div class="modal-title">💬 '+escHtml(safeName(partner))+' '+(gold?'👑':'')+'</div><div style="font-size:11px;color:var(--text-secondary)">ID: '+partner.uid+' · '+lastSeenText(userId)+'</div></div><button class="modal-close" onclick="closeChat()">✕</button></div><div class="chat-messages" id="chatMsgs">'+renderMsgs(msgs)+'</div><div class="chat-input-row"><button class="chat-btn photo" onclick="attachPhoto('+userId+')">📷</button><input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key===\'Enter\')sendMsg('+userId+')"><button class="chat-btn" onclick="sendMsg('+userId+')">➤</button></div><input type="file" id="photoInput" accept="image/*" style="display:none"></div>';document.body.appendChild(ov);var mb=document.getElementById('chatMsgs');if(mb)mb.scrollTop=mb.scrollHeight;}
 function renderMsgs(msgs){if(!msgs||!msgs.length)return'<div style="text-align:center;color:var(--text-secondary);font-size:13px;margin:auto">💬 Начните общение</div>';return msgs.map(function(m){var own=m.fromId===CU.id,t=new Date(m.time).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});return'<div class="chat-message '+(own?'own':'other')+'">'+(!own?'<div class="msg-sender">'+escHtml(m.fromName||'?')+'</div>':'')+'<div class="msg-bubble">'+(m.img?'<img src="'+m.img+'" style="max-width:200px;border-radius:10px">':escHtml(m.text||''))+'</div><div class="msg-time">'+t+'</div></div>'}).join('')}
-function sendMsg(toId,text,img){var inp=document.getElementById('chatInput');text=text||(inp?inp.value.trim():'');if((!text&&!img)||!CU)return;var cid=getChatId(CU.id,toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];DB.chats[cid].push({id:Date.now()+'_'+Math.random().toString(16).slice(2,6),fromId:CU.id,fromName:CU.name,toId:toId,text:text||'',img:img||null,time:new Date().toISOString(),read:false});cloudSave();if(inp)inp.value='';var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight;}}
+function sendMsg(toId,text,img){var inp=document.getElementById('chatInput');text=text||(inp?inp.value.trim():'');if((!text&&!img)||!CU)return;var cid=getChatId(CU.id,toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];DB.chats[cid].push({id:Date.now()+'_'+Math.random().toString(16).slice(2,6),fromId:CU.id,fromName:CU.name,toId:toId,text:text||'',img:img||null,time:new Date().toISOString(),read:false});pushNotif(toId,'💬 Новое сообщение',safeName(CU)+': '+(img?'📷 Фото':(text||'').slice(0,40)),'info');cloudSave();ntfyPublish({type:'msg',toId:toId,fromId:CU.id,fromName:safeName(CU)});if(inp)inp.value='';var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight;}}
 function processImage(file,cb){var r=new FileReader();r.onload=function(ev){var img=new Image();img.onload=function(){var max=900,w=img.width,h=img.height,k=Math.min(1,max/Math.max(w,h));var cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);cb(cv.toDataURL('image/jpeg',.7))};img.src=ev.target.result};r.readAsDataURL(file)}
 function attachPhoto(toId){var inp=document.getElementById('photoInput');if(!inp)return;inp.onchange=function(e){var f=e.target.files[0];if(!f)return;if(f.size>6*1024*1024){toast('','Файл слишком большой','error');return}processImage(f,function(d){sendMsg(toId,'',d)});inp.value=''};inp.click()}
 function closeChat(){var o=document.getElementById('chatOverlay');if(o)o.remove();renderChats();}
