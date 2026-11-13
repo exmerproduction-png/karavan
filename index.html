@@ -568,7 +568,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v3</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v4</p>
     </footer>
 </div>
 
@@ -580,6 +580,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
    Вся база DB хранится одним JSON-документом по адресу DB_URL ниже.
    ===================================================================== */
 var DB_URL = 'https://textdb.dev/api/data/karavan-voda-db-7f3a9c2e';
+var KV_URL = 'https://kvdb.io/6gWvxvKvA6qmohodFprVKV/db';
 
 
 var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{}};
@@ -624,44 +625,51 @@ function syncMerge(local,remote){
 }
 function cloudLoad(cb){
     showSync(true);
-    fetchT(DB_URL+'?t='+Date.now(),{},10000).then(function(r){return r.text()}).then(function(txt){
-        var loaded=false;
-        if(txt&&txt.trim()){
-            try{DB=mergeDB(JSON.parse(txt));loaded=true;cloudReady=true;}catch(e){}
-        }
-        showSync(false);ensureCreator();if(cb)cb();
-        if(!loaded)cloudSave();
-    }).catch(function(e){showSync(false);ensureCreator();if(cb)cb();});
+    var done=false;
+    function finish(db,ok){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;}showSync(false);ensureCreator();if(cb)cb();if(!ok)cloudSave();}
+    function tryKv(ok){return fetchT(KV_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{finish(JSON.parse(t2),true);return}catch(e){}}finish(null,ok)}).catch(function(){finish(null,ok)});}
+    fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
+        if(txt&&txt.trim()){try{finish(JSON.parse(txt),true);return}catch(e){}}
+        return tryKv(false);
+    }).catch(function(){return tryKv(false)});
 }
 function cloudSave(cb){
     saveQueue.push(cb);
     if(saving)return;
     doSave();
 }
+var offlineWarned=false;
 function doSave(){
     if(!saveQueue.length){saving=false;return}
     saving=true;showSync(true);lastSaved=Date.now();ensureCreator();cleanExpired();
     var localCopy=JSON.parse(JSON.stringify(DB));
+    var payload=JSON.stringify(localCopy);
     fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
         var merged=localCopy;
         if(txt&&txt.trim()){try{merged=syncMerge(localCopy,JSON.parse(txt))}catch(e){}}
         DB=merged;
-        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(merged)},15000);
-    }).then(function(r){
+        return JSON.stringify(merged);
+    }).catch(function(){return payload}).then(function(finalPayload){
+        return Promise.allSettled([
+            fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000),
+            fetchT(KV_URL+'?t='+Date.now(),{method:'POST',headers:{'Content-Type':'text/plain'},body:finalPayload},15000)
+        ]);
+    }).then(function(res){
+        var ok1=res[0].status==='fulfilled'&&res[0].value&&res[0].value.ok;
+        var ok2=res[1].status==='fulfilled'&&res[1].value&&res[1].value.ok;
         showSync(false);
         var cbs=saveQueue.slice();saveQueue=[];
-        if(r&&r.ok)setOnlinePill();
+        if(ok1||ok2){offlineWarned=false;setOnlinePill();}
+        else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📴','Нет связи с облаком — переподключаюсь…','warning');}setTimeout(function(){if(saving)return;doSave()},10000);}
         cbs.forEach(function(c){if(c)c();});
         saving=false;
         if(saveQueue.length)doSave();
-    }).catch(function(e){
-        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(localCopy)},15000).catch(function(){}).then(function(){
-            showSync(false);var cbs=saveQueue.slice();saveQueue=[];saving=false;cbs.forEach(function(c){if(c)c();});if(saveQueue.length)doSave();
-        });
     });
 }
 var pollTimer=null;
-function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}).catch(function(){});setOnlinePill();},3000);}
+var pollFail=0;
+function applyRemote(f){if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}
+function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){pollFail=0;if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f);}).catch(function(){pollFail++;fetchT(KV_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}applyRemote(f);}).catch(function(){});});setOnlinePill();},3000);}
 function ensureCreator(){
     var cp=normPhone(CREATOR.phone),found=false;
     for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
@@ -711,6 +719,7 @@ function publishPresence(){
     DB.presence[CU.id]={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
     cloudSave();
 }
+function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||!CU)return;var pid=parseInt(ov.dataset.partner,10);if(!pid)return;var cid=getChatId(CU.id,pid);var msgs=(DB.chats||{})[cid]||[];var mb=document.getElementById('chatMsgs');if(!mb)return;var atBottom=mb.scrollHeight-mb.scrollTop-mb.clientHeight<80;mb.innerHTML=renderMsgs(msgs);if(atBottom)mb.scrollTop=mb.scrollHeight;msgs.forEach(function(m){if(m.toId===CU.id&&!m.read)m.read=true});}
 
 
 /* ================= СТАРТ ================= */
@@ -722,7 +731,8 @@ document.addEventListener('DOMContentLoaded',function(){
         if(CU){var f=findUserById(CU.id);if(f){CU=f;lsSet('CU',JSON.stringify(CU));}}
         setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},600)}},1500);
         refreshAll();startPolling();publishPresence();
-        setInterval(publishPresence,15000);
+        setInterval(publishPresence,10000);
+        window.addEventListener('focus',function(){if(CU)publishPresence()});
     });
     renderCarousel();
     setInterval(function(){showLightning();},30000);
@@ -734,7 +744,7 @@ window.addEventListener('error',function(e){console.log('[КАРАВАН]',e&&e.
 function findUserById(id){for(var i=0;i<DB.users.length;i++){if(DB.users[i].id===id)return DB.users[i]}return null}
 function findUserByUid(uid){for(var i=0;i<DB.users.length;i++){if(DB.users[i].uid===uid)return DB.users[i]}return null}
 function findUserByPhone(ph){var np=normPhone(ph);for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===np)return DB.users[i]}return null}
-function refreshAll(){updateLoginStatus();updateProfileContent();renderCarousel();loadHistory();renderChats();renderPeople();renderAnnouncementsHome();renderAnnouncementsAdmin();showNotifDot();setOnlinePill();if(CU&&isAdmin(CU)){loadAdmin();loadAdminOrders();loadAdminUsers();renderPromoList();renderDiscounts();loadAdminChats();renderBonusRequests();renderMuted();updateCourierPins();renderComplaints();}}
+function refreshAll(){updateLoginStatus();updateProfileContent();renderCarousel();loadHistory();renderChats();updateOpenChat();renderPeople();renderAnnouncementsHome();renderAnnouncementsAdmin();showNotifDot();setOnlinePill();if(CU&&isAdmin(CU)){loadAdmin();loadAdminOrders();loadAdminUsers();renderPromoList();renderDiscounts();loadAdminChats();renderBonusRequests();renderMuted();updateCourierPins();renderComplaints();}}
 
 
 /* ================= НАВИГАЦИЯ ================= */
@@ -836,8 +846,10 @@ function updateProfileContent(){
 function renderPeople(){
     var c=document.getElementById('peopleContent');if(!c)return;
     if(!CU){c.innerHTML='<div class="empty-state"><div class="empty-state-icon">🔐</div><div class="empty-state-text">Войдите, чтобы видеть людей</div></div><button class="btn btn-primary" onclick="showPage(\'loginForm\')">🔐 Войти</button>';return}
-    var users=DB.users.slice().sort(function(a,b){
-        var ao=isOnlineUser(a.id)?0:1,bo=isOnlineUser(b.id)?0:1;
+    var users=DB.users.slice();
+    if(CU&&!findUserById(CU.id))users.push(CU);
+    users.sort(function(a,b){
+        var ao=(a.id===CU.id)||isOnlineUser(a.id)?0:1,bo=(b.id===CU.id)||isOnlineUser(b.id)?0:1;
         if(ao!==bo)return ao-bo;
         return safeName(a).localeCompare(safeName(b),'ru');
     });
