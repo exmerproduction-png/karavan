@@ -268,7 +268,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 
 <!-- ЗАДАЧА 1: новый текст заставки (верх + низ) -->
 <div id="splash">
-    <img src="https://karavanvoda.ru/wp-content/uploads/2024/01/cropped-favicon-192x192.png" alt="КАРАВАН" onerror="this.src='https://image.qwenlm.ai/public_source/8a8ba5e2-e149-4102-8d72-1904e4a5ddc9/1b65710ff-8567-4325-aec7-9d3dd26b31ac.png'">
+    <img src="https://static.tildacdn.com/tild3461-6461-4666-b138-653933353666/pic-01-tiny.png" alt="КАРАВАН" onerror="this.outerHTML='🐫'">
     <div class="sp-top">Приложение karavanvoda.ru грузится, пожалуйста подождите</div>
     <div class="sp-load"><span></span></div>
     <div class="sp-bottom">Это займёт не больше пару секунд</div>
@@ -290,7 +290,7 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
                 <button class="top-btn" onclick="toggleNotifs()" id="notifBtn">🔔</button>
             </div>
             <div class="logo-container">
-                <div class="logo-icon"><img src="https://karavanvoda.ru/wp-content/uploads/2024/01/cropped-favicon-192x192.png" alt="" onerror="this.outerHTML='🫗'"></div>
+                <div class="logo-icon"><img src="https://static.tildacdn.com/tild3461-6461-4666-b138-653933353666/pic-01-tiny.png" alt="" onerror="this.outerHTML='🐫'"></div>
                 <h1>КАРАВАН</h1>
             </div>
             <p>Доставка воды премиум качества</p>
@@ -587,11 +587,11 @@ var CU=null, cart=[], selIdx=0, appliedPromo=null, selectedPayment='card', myGeo
 
 /* ЗАДАЧА 2: товары с фото (ссылки на реальные изображения) */
 var PRODUCTS=[
-    {id:'bottle_first',name:'Бутыль 19л (первая)',price:600,isBottle:true,img:'https://karavanvoda.ru/wp-content/uploads/2024/01/butyl-19l.png',desc:'Первая бутыль 19 литров чистой воды'},
-    {id:'bottle_repeat',name:'Замена бутыли 19л',price:150,isBottle:true,img:'https://karavanvoda.ru/wp-content/uploads/2024/01/butyl-19l.png',desc:'Замена пустой бутыли на полную'},
-    {id:'pump_mech',name:'Помпа механическая',price:400,isBottle:false,img:'https://karavanvoda.ru/wp-content/uploads/2024/01/pompa-meh.png',desc:'Механическая помпа для бутыли'},
-    {id:'pump_elec',name:'Помпа электронная',price:500,isBottle:false,img:'https://karavanvoda.ru/wp-content/uploads/2024/01/pompa-el.png',desc:'Электронная помпа с кнопкой'},
-    {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'https://karavanvoda.ru/wp-content/uploads/2024/01/pompa-vip.png',desc:'Премиальная помпа VIP'}
+    {id:'bottle_first',name:'Бутыль 19л (первая)',price:600,isBottle:true,img:'https://static.tildacdn.com/tild3135-6162-4634-a330-656539393762/001.png',desc:'Первая бутыль 19 литров чистой воды'},
+    {id:'bottle_repeat',name:'Замена бутыли 19л',price:150,isBottle:true,img:'https://static.tildacdn.com/tild3135-6162-4634-a330-656539393762/001.png',desc:'Замена пустой бутыли на полную'},
+    {id:'pump_mech',name:'Помпа механическая',price:400,isBottle:false,img:'https://static.tildacdn.com/tild6632-3538-4031-a664-353438393363/002.png',desc:'Механическая помпа для бутыли'},
+    {id:'pump_elec',name:'Помпа электронная',price:500,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Электронная помпа с кнопкой'},
+    {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'',desc:'Премиальная помпа VIP'}
 ];
 function prodById(id){for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id===id)return PRODUCTS[i]}return PRODUCTS[0]}
 
@@ -609,9 +609,20 @@ function showSync(on){var b=document.getElementById('syncBadge');if(b)b.classLis
 function setOnlinePill(){var t=document.getElementById('onlineText');if(!t)return;var cnt=countOnline();t.textContent='Онлайн 🟢 '+cnt+' '+(cnt===1?'человек':(cnt>=2&&cnt<=4?'человека':'людей'));}
 function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<60000)c++;}return c;}
 function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{}}}
+function fetchT(url,opt,tmo){opt=opt||{};tmo=tmo||8000;var c=new AbortController();var t=setTimeout(function(){try{c.abort()}catch(e){}},tmo);opt.signal=c.signal;return fetch(url,opt).then(function(r){clearTimeout(t);return r},function(e){clearTimeout(t);throw e})}
+function syncMerge(local,remote){
+    var out=mergeDB(remote);
+    function unionById(arr,locArr){var ids={};arr.forEach(function(x){if(x&&x.id!==undefined)ids[x.id]=1});(locArr||[]).forEach(function(x){if(x&&x.id!==undefined&&!ids[x.id]){arr.push(x);ids[x.id]=1}})}
+    unionById(out.users,local.users);unionById(out.orders,local.orders);unionById(out.announcements,local.announcements);unionById(out.bonusRequests,local.bonusRequests);unionById(out.complaints,local.complaints);unionById(out.reviews,local.reviews);
+    var lm=local.chats||{};for(var cid in lm){if(!Array.isArray(lm[cid]))continue;var rm=Array.isArray(out.chats[cid])?out.chats[cid]:[];var seen={},all=rm.concat(lm[cid]).filter(function(m){if(!m||!m.id||seen[m.id])return false;seen[m.id]=1;return true});all.sort(function(a,b){return new Date(a.time)-new Date(b.time)});out.chats[cid]=all;}
+    for(var uid in (local.presence||{})){var lp=local.presence[uid],rp=out.presence[uid];if(lp&&(!rp||(lp.ts||0)>=(rp.ts||0)))out.presence[uid]=lp;}
+    ['promos','discounts','bonuses','pinned','muted'].forEach(function(key){var lo=local[key]||{};for(var kk in lo){if(out[key][kk]===undefined)out[key][kk]=lo[kk]}});
+    var ln=local._notifs||{};for(var u2 in ln){var la=Array.isArray(ln[u2])?ln[u2]:[],ra=Array.isArray(out._notifs[u2])?out._notifs[u2]:[];var seen2={},all2=ra.concat(la).filter(function(n){if(!n||!n.id||seen2[n.id])return false;seen2[n.id]=1;return true});all2.sort(function(a,b){return new Date(b.time)-new Date(a.time)});out._notifs[u2]=all2.slice(0,40);}
+    return out;
+}
 function cloudLoad(cb){
     showSync(true);
-    fetch(DB_URL+'?t='+Date.now()).then(function(r){return r.text()}).then(function(txt){
+    fetchT(DB_URL+'?t='+Date.now(),{},10000).then(function(r){return r.text()}).then(function(txt){
         var loaded=false;
         if(txt&&txt.trim()){
             try{DB=mergeDB(JSON.parse(txt));loaded=true;cloudReady=true;}catch(e){}
@@ -628,18 +639,27 @@ function cloudSave(cb){
 function doSave(){
     if(!saveQueue.length){saving=false;return}
     saving=true;showSync(true);lastSaved=Date.now();ensureCreator();cleanExpired();
-    var payload=JSON.stringify(DB);
-    fetch(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:payload}).then(function(r){
+    var localCopy=JSON.parse(JSON.stringify(DB));
+    fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
+        var merged=localCopy;
+        if(txt&&txt.trim()){try{merged=syncMerge(localCopy,JSON.parse(txt))}catch(e){}}
+        DB=merged;
+        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(merged)},15000);
+    }).then(function(r){
         showSync(false);
         var cbs=saveQueue.slice();saveQueue=[];
-        if(r.ok)setOnlinePill();
+        if(r&&r.ok)setOnlinePill();
         cbs.forEach(function(c){if(c)c();});
         saving=false;
         if(saveQueue.length)doSave();
-    }).catch(function(e){showSync(false);var cbs=saveQueue.slice();saveQueue=[];saving=false;cbs.forEach(function(c){if(c)c();});if(saveQueue.length)doSave();});
+    }).catch(function(e){
+        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(localCopy)},15000).catch(function(){}).then(function(){
+            showSync(false);var cbs=saveQueue.slice();saveQueue=[];saving=false;cbs.forEach(function(c){if(c)c();});if(saveQueue.length)doSave();
+        });
+    });
 }
 var pollTimer=null;
-function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetch(DB_URL+'?t='+Date.now()).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}).catch(function(){});setOnlinePill();},3000);}
+function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(!txt||!txt.trim())return;var f;try{f=mergeDB(JSON.parse(txt))}catch(e){return}if(JSON.stringify(f)!==JSON.stringify(DB)){DB=f;ensureCreator();refreshAll();}}).catch(function(){});setOnlinePill();},3000);}
 function ensureCreator(){var cp=normPhone(CREATOR.phone),found=false;for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;break;}}if(!found)DB.users.push({id:1000000001,uid:'creator00001',name:CREATOR.name,phone:CREATOR.phone,email:CREATOR.email,birthDate:CREATOR.birthDate,password:'creator',role:'creator',createdAt:new Date().toISOString(),rating:0});}
 function cleanExpired(){
     var now=Date.now();
@@ -680,9 +700,7 @@ function publishPresence(){
     if(!CU)return;
     if(!DB.presence)DB.presence={};
     DB.presence[CU.id]={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
-    try{
-        fetch(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(DB)}).catch(function(){});
-    }catch(e){}
+    cloudSave();
 }
 
 
