@@ -347,9 +347,9 @@ body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
     <div class="nav" id="mainNav">
         <button onclick="showPage('home')" class="active"><span class="nav-icon">🏠</span><span class="nav-label">Главная</span></button>
         <button onclick="showPage('order')"><span class="nav-icon">📦</span><span class="nav-label">Заказ</span></button>
-        <button onclick="showPage('history')"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
-        <button onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
-        <button onclick="showPage('chats')"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
+        <button onclick="showPage('history')" class="nav-staff"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
+        <button onclick="showPage('people')" class="nav-staff"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
+        <button onclick="showPage('chats')" class="nav-staff"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
         <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
     </div>
@@ -631,7 +631,7 @@ body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v14</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v15</p>
     </footer>
 </div>
 
@@ -856,6 +856,7 @@ function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||
 /* ================= СТАРТ ================= */
 document.addEventListener('DOMContentLoaded',function(){
     CU=jGet('CU',null);cart=jGet('cart',[]);if(!Array.isArray(cart))cart=[];
+    updateNav();
     if(lsGet('darkTheme')==='1'){document.body.classList.add('dark');document.getElementById('themeBtn').textContent='☀️'}
     fetchGeo();
     fbAuthInit().catch(function(){}).then(function(){cloudLoad(function(){
@@ -964,7 +965,8 @@ function confirmDeleteAccount(){confirm2('Удалить аккаунт навс
 
 
 /* ================= ПРОФИЛЬ (с рейтингом курьера) ================= */
-function updateLoginStatus(){var el=document.getElementById('loginStatus');if(!el)return;if(CU){var r=roleOf(CU);el.className='info-block success';el.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center"><span style="font-size:28px">'+roleIcon(r)+'</span><div style="text-align:left"><strong style="font-size:16px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<br><span style="font-size:11px">ID: '+CU.uid+'</span><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span>'+(myGeo?'<br><span style="font-size:10px">🌍 '+escHtml(myGeo.city||'')+'</span>':'')+'</div></div>';}else{el.className='info-block';el.innerHTML='<p style="text-align:center;font-size:15px">👋 Добро пожаловать!</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="showPage(\'loginForm\')">Войти</button><button class="btn btn-outline btn-sm" onclick="showPage(\'registerForm\')">Регистрация</button></div>';}}
+function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});var act=document.querySelector('.page.active');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'){showPage('home');}}
+function updateLoginStatus(){updateNav();var el=document.getElementById('loginStatus');if(!el)return;if(CU){var r=roleOf(CU);el.className='info-block success';el.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center"><span style="font-size:28px">'+roleIcon(r)+'</span><div style="text-align:left"><strong style="font-size:16px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<br><span style="font-size:11px">ID: '+CU.uid+'</span><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span>'+(myGeo?'<br><span style="font-size:10px">🌍 '+escHtml(myGeo.city||'')+'</span>':'')+'</div></div>';}else{el.className='info-block';el.innerHTML='<p style="text-align:center;font-size:15px">👋 Добро пожаловать!</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="showPage(\'loginForm\')">Войти</button><button class="btn btn-outline btn-sm" onclick="showPage(\'registerForm\')">Регистрация</button></div>';}}
 function updateProfileContent(){
     var el=document.getElementById('profileContent');if(!el)return;
     if(!CU){el.innerHTML='<div class="empty-state"><div class="empty-state-icon">🔐</div><div class="empty-state-text">Войдите</div></div><button class="btn btn-primary" onclick="showPage(\'loginForm\')">🔐 Войти</button>';return}
