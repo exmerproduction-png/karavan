@@ -708,7 +708,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v24</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v25</p>
     </footer>
 </div>
 
@@ -733,6 +733,7 @@ var fbTok = jGet('fbTok', null), fbRef = jGet('fbRef', null), fbTokExp = 0;var f
 var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{},statsOffsetTs:{},discTs:{},_deleted:{},_notifsCleared:{}};
 var cloudReady=false, saving=false, lastSaved=0, saveQueue=[];
 var CU=null, cart=[], selIdx=0, appliedPromo=null, selectedPayment='card', myGeo=null, myIP=null;
+var PHOTO_CACHE=(function(){var c=null;try{c=JSON.parse(localStorage.getItem('photoCache')||'{}')||{}}catch(e){c={}}if(typeof c!=='object'||Array.isArray(c))c={};Object.keys(c).forEach(function(k){var e=c[k];if(!e||!e.d||String(e.d).indexOf('data:image')!==0)delete c[k]});return c})();
 
 
 /* ЗАДАЧА 2: товары с фото (ссылки на реальные изображения) */
@@ -1097,6 +1098,7 @@ function isMuted(u){if(!u||!DB.muted||!DB.muted[u.id])return false;var m=DB.mute
 function courierRating(uid){var revs=(DB.reviews||[]).filter(function(r){return r.courierUid===uid});if(!revs.length)return 0;var sum=0;revs.forEach(function(r){sum+=(r.stars||0)});var avg=sum/revs.length;return Math.min(10,avg*2);}
 function ratingColor(pct){if(pct>=7)return'#16a34a';if(pct>=4)return'#22c55e';if(pct>=2)return'#f59e0b';if(pct>0)return'#ef4444';return'#94a3b8';}
 function toast(t,m,type){type=type||'info';var c=document.getElementById('toastContainer'),el=document.createElement('div');el.className='toast';var ic={success:'✅',error:'❌',warning:'⚠️',info:'ℹ️'};el.innerHTML='<span style="font-size:22px">'+(ic[type]||'ℹ️')+'</span><div><div class="toast-title">'+t+'</div><div class="toast-message">'+m+'</div></div>';c.appendChild(el);setTimeout(function(){el.classList.add('hiding');setTimeout(function(){el.remove()},400)},3500)}
+function hardResetCache(){confirm2('Сбросить локальный кэш устройства? Приложение перезагрузится, нужно будет заново войти в аккаунт.',function(){try{localStorage.clear()}catch(e){}try{location.reload(true)}catch(e){location.href=location.href}})}
 function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—';
     if(fbLastOk){var d=Math.round((now-fbLastOk)/1000);fbSt=d<25?'✅ OK ('+d+' сек назад)':'⚠️ нет связи '+(d>=90?Math.round(d/60)+' мин':d+' сек');}
     if(fbLastOk&&now-fbLastOk<25000)fbCh='Firebase (основной)';else if(fbFallbackLast&&now-fbFallbackLast<120000)fbCh='запасной (textdb/blob)';
@@ -1105,13 +1107,14 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v24</b></div>'
+    +'<div>Версия приложения: <b>v25</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
+    +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
     +'<div>Канал данных: <b>'+fbCh+'</b></div>'
     +'<div>Мой пульс: <b>'+hb+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
-    +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button></div>';
+    +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
     var old=document.getElementById('diagOv');if(old)old.remove();
     document.body.appendChild(o);
 }
@@ -1160,7 +1163,7 @@ function findUserByUid(uid){for(var i=0;i<DB.users.length;i++){if(DB.users[i].ui
 function findUserByPhone(ph){var np=normPhone(ph);for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===np)return DB.users[i]}return null}
 function checkMuteOverlay(){var o=document.getElementById('muteOverlay');if(!o)return;var m=CU&&DB.muted&&DB.muted[CU.id]?DB.muted[CU.id]:null;var active=m&&(!m.until||m.until>Date.now())&&(!m.from||m.from<=Date.now())&&CU&&!isCreator(CU);if(!active){o.style.display='none';return}o.innerHTML='<div class="mo-ico">🔇</div><div class="mo-title">Доступ ограничен</div><div class="mo-card"><p><strong>Причина:</strong> '+escHtml(m.reason||'Нарушение правил')+'</p><p><strong>С:</strong> '+(m.from?new Date(m.from).toLocaleString('ru-RU'):'—')+'</p><p><strong>До:</strong> '+(m.until?new Date(m.until).toLocaleString('ru-RU'):'∞')+'</p></div><div class="mo-sub">Вопросы по блокировке — администрация КАРАВАН: 8 (964) 004-28-27</div>';o.style.display='flex';}
 function initFx(){var l=document.getElementById('fxLayer');if(!l)return;var h='';for(var i=0;i<8;i++){var sz=(1+Math.random()*1.6).toFixed(1);h+='<div class="fx-meteor run" style="top:'+(Math.random()*40).toFixed(0)+'%;left:'+(25+Math.random()*70).toFixed(0)+'%;width:'+sz+'px;height:'+sz+'px;animation-duration:'+(5+Math.random()*7).toFixed(1)+'s;animation-delay:'+(Math.random()*12).toFixed(1)+'s"></div>'}l.innerHTML=h}
-function refreshAll(){updateLoginStatus();updateProfileContent();renderCarousel();loadHistory();renderChats();updateOpenChat();renderPeople();renderAnnouncementsHome();renderAnnouncementsAdmin();showNotifDot();setOnlinePill();checkMuteOverlay();ensurePhotos();if(CU&&isAdmin(CU)){loadAdmin();loadAdminOrders();loadAdminUsers();renderPromoList();renderDiscounts();loadAdminChats();renderBonusRequests();renderMuted();updateCourierPins();renderComplaints();renderAdminProducts();}}
+function refreshAll(){[updateLoginStatus,updateProfileContent,renderCarousel,loadHistory,renderChats,updateOpenChat,renderPeople,renderAnnouncementsHome,renderAnnouncementsAdmin,showNotifDot,setOnlinePill,checkMuteOverlay,ensurePhotos].forEach(function(f){try{f()}catch(e){console.warn('render skip',e&&e.message)}});if(CU&&isAdmin(CU)){[loadAdmin,loadAdminOrders,loadAdminUsers,renderPromoList,renderDiscounts,loadAdminChats,renderBonusRequests,renderMuted,updateCourierPins,renderComplaints,renderAdminProducts].forEach(function(f){try{f()}catch(e){console.warn('admin render skip',e&&e.message)}})}}
 
 
 /* ================= НАВИГАЦИЯ ================= */
@@ -1257,7 +1260,7 @@ function updateProfileContent(){
     var r=roleOf(CU),orders=DB.orders.filter(function(o){return o.userId===CU.id}),bonus=(DB.bonuses&&DB.bonuses[CU.id])||0;
     var ratingHtml='';
     if(r==='worker'){var pct=courierRating(CU.uid);var col=ratingColor(pct);ratingHtml='<div style="text-align:center;margin:14px 0"><div style="font-size:13px;font-weight:700;margin-bottom:6px">⭐ Ваш рейтинг курьера</div><div class="rating-gauge"><svg viewBox="0 0 120 70"><path d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/><path d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="'+col+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+(pct*15.7)+' 157"/></svg><div class="val" style="color:'+col+'">'+pct.toFixed(1)+'%</div></div></div>';}
-    el.innerHTML='<div class="info-block success" style="text-align:center">'+(CU.photo?'<img src="'+CU.photo+'" style="width:84px;height:84px;border-radius:50%;object-fit:cover;margin-bottom:8px;box-shadow:0 8px 24px rgba(37,99,235,.35)">':'<div style="font-size:55px;margin-bottom:8px">'+roleIcon(r)+'</div>')+'<strong style="font-size:18px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<div class="profile-uid">🆔 ID: '+CU.uid+'</div><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span></div>'+ratingHtml+'<div class="info-block"><p>👤 <strong>Имя:</strong> '+escHtml(safeName(CU))+'</p><p>📞 <strong>Телефон:</strong> '+(CU.phone||'—')+'</p>'+(CU.email?'<p>✉️ <strong>Email:</strong> '+escHtml(CU.email)+'</p>':'')+'<p>🎂 <strong>Дата рождения:</strong> '+(CU.birthDate||'—')+(ageOf(CU)?' <span class="badge badge-primary">'+ageOf(CU)+' '+pluralYears(ageOf(CU))+'</span>':'')+'</p><p>⚧ <strong>Пол:</strong> '+(CU.gender==='female'?'<span class="badge" style="background:linear-gradient(135deg,#db2777,#f472b6);color:#fff">Женский</span>':CU.gender==='male'?'<span class="badge" style="background:linear-gradient(135deg,#2563eb,#38bdf8);color:#fff">Мужской</span>':'—')+'</p><p>🎁 <strong>Бонусы:</strong> '+bonus+'</p></div><div class="stats-grid"><div class="stat-card"><div class="stat-value">'+orders.length+'</div><div class="stat-label">Заказов</div></div><div class="stat-card"><div class="stat-value">'+orders.filter(function(o){return o.status==='delivered'}).length+'</div><div class="stat-label">Доставлено</div></div></div><button class="btn btn-primary" onclick="showPage(\'editProfile\');loadEdit()">✏️ Редактировать</button>'+(isAdmin(CU)?'<button class="btn btn-gold" onclick="showPage(\'adminPanel\')">⭐ Панель управления</button>':'')+'<button class="btn btn-danger" onclick="logout()">🚪 Выйти</button>';
+    el.innerHTML='<div class="info-block success" style="text-align:center">'+(photoOf(CU)?'<img src="'+photoOf(CU)+'" style="width:84px;height:84px;border-radius:50%;object-fit:cover;margin-bottom:8px;box-shadow:0 8px 24px rgba(37,99,235,.35)" onerror="this.style.display=\'none\'">':'<div style="font-size:55px;margin-bottom:8px">'+roleIcon(r)+'</div>')+'<strong style="font-size:18px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<div class="profile-uid">🆔 ID: '+CU.uid+'</div><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span></div>'+ratingHtml+'<div class="info-block"><p>👤 <strong>Имя:</strong> '+escHtml(safeName(CU))+'</p><p>📞 <strong>Телефон:</strong> '+(CU.phone||'—')+'</p>'+(CU.email?'<p>✉️ <strong>Email:</strong> '+escHtml(CU.email)+'</p>':'')+'<p>🎂 <strong>Дата рождения:</strong> '+(CU.birthDate||'—')+(ageOf(CU)?' <span class="badge badge-primary">'+ageOf(CU)+' '+pluralYears(ageOf(CU))+'</span>':'')+'</p><p>⚧ <strong>Пол:</strong> '+(CU.gender==='female'?'<span class="badge" style="background:linear-gradient(135deg,#db2777,#f472b6);color:#fff">Женский</span>':CU.gender==='male'?'<span class="badge" style="background:linear-gradient(135deg,#2563eb,#38bdf8);color:#fff">Мужской</span>':'—')+'</p><p>🎁 <strong>Бонусы:</strong> '+bonus+'</p></div><div class="stats-grid"><div class="stat-card"><div class="stat-value">'+orders.length+'</div><div class="stat-label">Заказов</div></div><div class="stat-card"><div class="stat-value">'+orders.filter(function(o){return o.status==='delivered'}).length+'</div><div class="stat-label">Доставлено</div></div></div><button class="btn btn-primary" onclick="showPage(\'editProfile\');loadEdit()">✏️ Редактировать</button>'+(isAdmin(CU)?'<button class="btn btn-gold" onclick="showPage(\'adminPanel\')">⭐ Панель управления</button>':'')+'<button class="btn btn-danger" onclick="logout()">🚪 Выйти</button>';
 }
 
 
