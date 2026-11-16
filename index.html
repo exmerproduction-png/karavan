@@ -707,7 +707,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v30</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v31</p>
     </footer>
 </div>
 
@@ -940,18 +940,33 @@ function pollFallback(){fbFallbackLast=Date.now();
         else tryBlob();
     }).catch(tryBlob);
 }
+function saveSnapshot(){
+    try{var snap=JSON.parse(JSON.stringify(DB));
+        if(snap.chats)Object.keys(snap.chats).forEach(function(cid){(snap.chats[cid]||[]).forEach(function(m){if(m){delete m.img;delete m.video}})});
+        var sj=JSON.stringify(snap);if(sj.length<3000000)lsSet('lastDB',sj);
+    }catch(e){}
+}
 function cloudLoad(cb){
-    showSync(true);var done=false;var pRemote=null;
-    function finish(db,ok,trusted){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;}showSync(false);ensureCreator();if(trusted&&db&&CU&&!findUserById(CU.id)&&!isCreator(CU)){CU=null;lsDel('CU');}if(cb)cb();if(pRemote){var pp=DB.presence||{};Object.keys(pRemote).forEach(function(k){var e=pRemote[k];if(e&&(!pp[k]||(pp[k].ts||0)<(e.ts||0)))pp[k]=e});DB.presence=pp;setOnlinePill();}if(!ok)cloudSave();}
+    showSync(true);var done=false;var pRemote=null;var fed=false;
+    function finish(db,ok,trusted){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;saveSnapshot();}showSync(false);ensureCreator();if(trusted&&db&&CU&&!findUserById(CU.id)&&!isCreator(CU)){CU=null;lsDel('CU');}if(cb)cb();if(pRemote){var pp=DB.presence||{};Object.keys(pRemote).forEach(function(k){var e=pRemote[k];if(e&&(!pp[k]||(pp[k].ts||0)<(e.ts||0)))pp[k]=e});DB.presence=pp;setOnlinePill();}if(!ok)cloudSave();}
+    function feed(db,trusted){
+        if(!db)return;
+        if(done){try{applyRemote(mergeDB(db));ensurePhotos();}catch(e){}return;}
+        if(!fed){fed=true;finish(db,true,trusted);}
+        else{try{applyRemote(mergeDB(db));ensurePhotos();}catch(e){}}
+    }
+    function offlineDB(){if(done)return;done=true;var ld=jGet('lastDB',null);if(ld){try{DB=mergeDB(ld);cloudReady=true;}catch(e){}}showSync(false);ensureCreator();if(cb)cb();if(ld)toast('\ud83d\udcf4','\u041e\u0444\u043b\u0430\u0439\u043d-\u0440\u0435\u0436\u0438\u043c: \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u044b \u0434\u0430\u043d\u043d\u044b\u0435 \u0441 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430, \u043e\u0431\u043d\u043e\u0432\u043b\u044e \u043a\u0430\u043a \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u044c','warning');}
     function tryBlob(){
-        function read(){if(!blobId){finish(null,false,false);return}fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{finish(JSON.parse(t2),true,false);return}catch(e){}}finish(null,false,false)}).catch(function(){finish(null,false,false)})}
+        function read(){if(!blobId){if(!fed&&!done)offlineDB();return}fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{feed(JSON.parse(t2),false);return}catch(e){}}if(!fed&&!done)offlineDB()}).catch(function(){if(!fed&&!done)offlineDB()})}
         if(blobId)read();else fetchRegistry(function(){read()});
     }
-    function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(txt){
-        if(txt&&txt.trim()){try{finish(JSON.parse(txt),true,false);fetchRegistry(function(){});return}catch(e){}}
+    function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        if(txt&&txt.trim()){try{feed(JSON.parse(txt),false);fetchRegistry(function(){});return}catch(e){}}
         tryBlob();
     }).catch(function(){tryBlob()});}
     if(!FB_DB){tryText();return;}
+    tryText();
+    fbProxyPoll();
     var authP=(FB_KEY&&!(fbTok&&fbTokExp>Date.now()+120000))?fbAuthInit().catch(function(){return fbReauth()}):Promise.resolve(true);
     authP.then(function(){
         return fbMigrate().then(function(){
@@ -964,11 +979,12 @@ function cloudLoad(cb){
                     var extras=[fbGetNode(KV+'/hb',true).then(function(rr){if(rr.v){var now=Date.now(),pp={};Object.keys(rr.v).forEach(function(k){var e=rr.v[k];if(e&&e.ts&&now-e.ts<300000)pp[k]=e});pRemote=pp;}})];
                     if(CU)extras.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(rr){if(rr.v){knownIdx=Object.assign({},rr.v);chatSeenSave();}}));
                     if(CU)extras.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(rr){if(rr.v){var o={};o[CU.id]=rr.v;remote._notifs=o;}}));
-                    return Promise.all(extras.map(function(p2){return p2.catch(function(){})})).then(function(){finish(remote,true,Object.keys(mt).length>0)});
+                    return Promise.all(extras.map(function(p2){return p2.catch(function(){})})).then(function(){feed(remote,Object.keys(mt).length>0)});
                 });
             });
         });
-    }).catch(function(){tryText()});
+    }).catch(function(){});
+    setTimeout(function(){if(!fed&&!done)offlineDB()},12000);
 }
 function cloudSave(cb){
     saveQueue.push(cb);
@@ -1022,7 +1038,7 @@ function doSave(){
             return mirrorPush(finalPayload,!ok).then(function(mok){
                 if(!ok&&mok)ok=true;
                 showSync(false);
-                if(ok){offlineWarned=false;setOnlinePill();ntfyPublish({type:'refresh',cols:changed});}
+                if(ok){offlineWarned=false;setOnlinePill();saveSnapshot();ntfyPublish({type:'refresh',cols:changed});}
                 else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}fbReauth();setTimeout(function(){if(saving)return;doSave()},10000);}
                 var cbs=saveQueue.slice();saveQueue=[];
                 cbs.forEach(function(c){if(c)c()});
@@ -1162,12 +1178,13 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v30</b></div>'
+    +'<div>Версия приложения: <b>v31</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
     +'<div>Канал данных: <b>'+fbCh+'</b></div>'
     +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
+    +'<div>Офлайн-копия на устройстве: <b>'+(jGet('lastDB',null)?'✅ есть':'нет')+'</b></div>'
     +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
     +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
