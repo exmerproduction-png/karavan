@@ -421,7 +421,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
     <div class="nav" id="mainNav">
         <button onclick="showPage('home')" class="active"><span class="nav-icon">🏠</span><span class="nav-label">Главная</span></button>
         <button onclick="showPage('order')"><span class="nav-icon">📦</span><span class="nav-label">Заказ</span></button>
-        <button onclick="showPage('history')" class="nav-staff"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
+        <button onclick="showPage('history')"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
         <button onclick="showPage('people')" class="nav-staff"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
         <button onclick="showPage('chats')" class="nav-staff"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
@@ -709,7 +709,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v27</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v28</p>
     </footer>
 </div>
 
@@ -765,7 +765,7 @@ var TICK2='<svg viewBox="0 0 20 16" fill="none"><path d="M1 8.5L5 12.5L13 4" str
 /* ================= ОБЛАКО ================= */
 function showSync(on){var b=document.getElementById('syncBadge');if(b)b.classList.toggle('show',!!on)}
 function setOnlinePill(){var t=document.getElementById('onlineText');if(!t)return;var cnt=countOnline();t.textContent='Онлайн 🟢 '+cnt+' '+(cnt===1?'человек':(cnt>=2&&cnt<=4?'человека':'людей'))+(CU?'':' · войдите');}
-function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<120000)c++;}if(CU&&!(p[CU.id]&&now-p[CU.id].ts<120000))c++;return c;}
+function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<300000)c++;}if(CU&&!(p[CU.id]&&now-p[CU.id].ts<300000))c++;return c;}
 function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{},customProducts:Array.isArray(r.customProducts)?r.customProducts:[],statsOffset:r.statsOffset&&typeof r.statsOffset==='object'?r.statsOffset:{},statsOffsetTs:r.statsOffsetTs&&typeof r.statsOffsetTs==='object'?r.statsOffsetTs:{},discTs:r.discTs&&typeof r.discTs==='object'?r.discTs:{},bonusTs:r.bonusTs&&typeof r.bonusTs==='object'?r.bonusTs:{},_deleted:r._deleted&&typeof r._deleted==='object'?r._deleted:{},_notifsCleared:r._notifsCleared&&typeof r._notifsCleared==='object'?r._notifsCleared:{}}}
 function tomb(type,id){if(!DB._deleted)DB._deleted={};DB._deleted[type+':'+id]=Date.now()}
 function untomb(type,id){if(DB._deleted)delete DB._deleted[type+':'+id]}
@@ -852,7 +852,7 @@ function hbFetch(){
     var ownE=CU?DB.presence[CU.id]:null;
     fbGetNode(KV+'/hb',true).then(function(r){
         if(r.nc)return;var h=r.v||{},now=Date.now(),p={};
-        Object.keys(h).forEach(function(k){var e=h[k];if(e&&e.ts&&now-e.ts<180000)p[k]=e});
+        Object.keys(h).forEach(function(k){var e=h[k];if(e&&e.ts&&now-e.ts<300000)p[k]=e});
         if(ownE&&(!p[CU.id]||(p[CU.id].ts||0)<(ownE.ts||0)))p[CU.id]=ownE;
         DB.presence=p;setOnlinePill();
         if(document.getElementById('peopleContent'))renderPeople();
@@ -922,7 +922,7 @@ function cloudLoad(cb){
                 return Promise.all(ks.map(function(k){return fbFetchCol(k).then(function(v){return[k,v]})})).then(function(rs){
                     var remote={};rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined)remote[x[0]]=x[1]});
                     ks.forEach(function(k){seenMt[COLS[k]]=mt[COLS[k]]});seenMtSave();
-                    var extras=[fbGetNode(KV+'/hb',true).then(function(rr){if(rr.v){var now=Date.now(),pp={};Object.keys(rr.v).forEach(function(k){var e=rr.v[k];if(e&&e.ts&&now-e.ts<180000)pp[k]=e});pRemote=pp;}})];
+                    var extras=[fbGetNode(KV+'/hb',true).then(function(rr){if(rr.v){var now=Date.now(),pp={};Object.keys(rr.v).forEach(function(k){var e=rr.v[k];if(e&&e.ts&&now-e.ts<300000)pp[k]=e});pRemote=pp;}})];
                     if(CU)extras.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(rr){if(rr.v){knownIdx=Object.assign({},rr.v);chatSeenSave();}}));
                     if(CU)extras.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(rr){if(rr.v){var o={};o[CU.id]=rr.v;remote._notifs=o;}}));
                     return Promise.all(extras.map(function(p2){return p2.catch(function(){})})).then(function(){finish(remote,true,Object.keys(mt).length>0)});
@@ -1037,7 +1037,7 @@ function pollOnce(){
             if(pid){var cid2=getChatId(CU.id,pid);
                 jobs.push(fbGetNode(KV+'/chats/'+cid2,true).then(function(rr){if(rr.nc||!rr.v)return;var pc={};pc[cid2]=rr.v;applyRemote(mergeDB({chats:pc}))}).catch(function(){}));}}
     }
-    if(pollTick%10===0)hbFetch();
+    if(pollTick%5===0)hbFetch();
     Promise.all(jobs).catch(function(){});
 }
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
@@ -1055,7 +1055,7 @@ function startLive(){
                     publishPresence();pollOnce();
                     var ov=document.getElementById('chatOverlay');
                     if(!(ov&&parseInt(ov.dataset.partner,10)===m.fromId))toast('💬','Новое сообщение от '+(m.fromName||'?'),'info');
-                } else if(m.type==='refresh'){pollOnce();}
+                } else if(m.type==='refresh'){publishPresence();pollOnce();}
             }catch(e){}
         };
     }catch(e){liveSrc=null}
@@ -1110,7 +1110,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v27</b></div>'
+    +'<div>Версия приложения: <b>v28</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
@@ -1413,7 +1413,7 @@ function clearAllData(){confirm2('УДАЛИТЬ ВСЮ ОБЛАЧНУЮ БАЗ�
 function getChatId(a,b){return[a,b].sort().join('_')}
 function renderChats(){var c=document.getElementById('chatsContent');if(!c)return;if(!CU){c.innerHTML='<div class="empty-state"><div class="empty-state-icon">🔐</div><div class="empty-state-text">Войдите</div></div>';return}var focused=document.activeElement&&document.activeElement.id==='chatSearch';if(focused){var le=document.getElementById('chatList');if(le)le.innerHTML=buildPartners();return}c.innerHTML='<div class="form-group"><input type="text" id="chatSearch" placeholder="🔍 Поиск по имени или ID..." oninput="handleChatSearch()" autocomplete="off"></div><div id="chatSearchResult"></div><h3>Диалоги</h3><div id="chatList">'+buildPartners()+'</div>';}
 function buildPartners(){if(!CU)return'';var chats=DB.chats||{},cp={};Object.keys(chats).forEach(function(cid){var pr=cid.split('_').map(Number);if(pr[0]===CU.id)cp[pr[1]]=1;if(pr[1]===CU.id)cp[pr[0]]=1});var partners=[];for(var pid in cp){var u=findUserById(+pid);if(u)partners.push(u);}if(!partners.length)return'<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">Нет диалогов</div><p style="font-size:12px;margin-top:8px;color:var(--text-secondary)">Найдите пользователя по имени или ID, либо откройте вкладку «Люди»</p></div>';return partners.map(function(u){var cid=getChatId(CU.id,u.id),msgs=chats[cid]||[];var unread=msgs.filter(function(m){return m.toId===CU.id&&!m.read}).length;var last=msgs.length?(msgs[msgs.length-1].video?'🎥 Видео':msgs[msgs.length-1].img?'📷 Фото':(msgs[msgs.length-1].text||'').slice(0,25)):'Нет сообщений';var gold=isCreator(u),pr=DB.presence&&DB.presence[u.id],sameNet=pr&&myIP&&pr.ip===myIP;return'<div class="user-list-item" onclick="openChat('+u.id+')"><div class="user-avatar'+(gold?' gold':'')+'">'+avatarHtml(u)+(isOnlineUser(u.id)?'<div class="online-indicator"></div>':'')+'</div><div style="flex:1"><div class="user-info-name">'+(u.id===CU.id?'⭐ Избранное':escHtml(safeName(u)))+' '+roleChip(u)+'</div><div class="user-info-id">ID: '+u.uid+(sameNet?' · 📶 одна сеть':'')+'</div><div class="user-info-last">'+lastSeenText(u.id)+'</div><div style="font-size:11px;color:var(--text-secondary);margin-top:2px">'+last+'</div></div>'+(unread?'<div class="unread-badge">'+unread+'</div>':'')+'</div>';}).join('');}
-function isOnlineUser(uid){var p=DB.presence&&DB.presence[uid];return p&&(Date.now()-p.ts<120000);}
+function isOnlineUser(uid){var p=DB.presence&&DB.presence[uid];return p&&(Date.now()-p.ts<300000);}
 function lastSeenText(uid){if(isOnlineUser(uid))return'в сети';var p=DB.presence&&DB.presence[uid];if(!p||!p.ts)return'давно';var d=new Date(p.ts),now=new Date(),diff=(now-d)/1000;var time=d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});if(diff<60)return'вышел(ла) в '+time;if(diff<3600)return'вышел(ла) в '+time+' ('+Math.floor(diff/60)+' мин назад)';return'был(а) '+d.toLocaleDateString('ru-RU')+' в '+time;}
 var chatSearchTimer;
 function handleChatSearch(){clearTimeout(chatSearchTimer);chatSearchTimer=setTimeout(doChatSearch,300)}
