@@ -257,8 +257,6 @@ body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);colo
 .notif-time{font-size:10px;color:var(--text-secondary);margin-top:3px}
 .sync-badge{position:fixed;bottom:10px;left:10px;background:rgba(16,185,129,.9);color:#fff;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;z-index:9998;display:none}
 .sync-badge.show{display:block}
-.lightning{position:fixed;bottom:20px;right:20px;width:40px;height:40px;border-radius:50%;background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3);display:none;align-items:center;justify-content:center;font-size:18px;z-index:9999;pointer-events:none;animation:lightBlink .8s ease-out}
-@keyframes lightBlink{0%{opacity:0;transform:scale(.5)}30%{opacity:1;transform:scale(1.15)}100%{opacity:0;transform:scale(1)}}
 .rating-gauge{position:relative;width:120px;height:70px;margin:10px auto}
 .rating-gauge svg{width:120px;height:70px}
 .rating-gauge .val{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:18px;font-weight:900}
@@ -397,7 +395,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
 <div class="toast-container" id="toastContainer"></div>
 <div class="sync-badge" id="syncBadge">☁️ Синхронизация…</div>
-<div class="lightning" id="lightning">⚡</div>
+
 <div id="notifPanel" class="notif-panel" style="display:none"></div>
 
 
@@ -709,7 +707,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v29</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v30</p>
     </footer>
 </div>
 
@@ -763,7 +761,7 @@ var TICK2='<svg viewBox="0 0 20 16" fill="none"><path d="M1 8.5L5 12.5L13 4" str
 
 
 /* ================= ОБЛАКО ================= */
-function showSync(on){var b=document.getElementById('syncBadge');if(b)b.classList.toggle('show',!!on)}
+var syncHideT=null;function showSync(on){var b=document.getElementById('syncBadge');if(!b)return;if(on){b.classList.add('show');if(syncHideT)clearTimeout(syncHideT);syncHideT=setTimeout(function(){b.classList.remove('show')},8000);}else{if(syncHideT){clearTimeout(syncHideT);syncHideT=null;}b.classList.remove('show')}}
 function setOnlinePill(){var t=document.getElementById('onlineText');if(!t)return;var cnt=countOnline();t.textContent='Онлайн 🟢 '+cnt+' '+(cnt===1?'человек':(cnt>=2&&cnt<=4?'человека':'людей'))+(CU?'':' · войдите');}
 function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<300000)c++;}if(CU&&!(p[CU.id]&&now-p[CU.id].ts<300000))c++;return c;}
 function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{},customProducts:Array.isArray(r.customProducts)?r.customProducts:[],statsOffset:r.statsOffset&&typeof r.statsOffset==='object'?r.statsOffset:{},statsOffsetTs:r.statsOffsetTs&&typeof r.statsOffsetTs==='object'?r.statsOffsetTs:{},discTs:r.discTs&&typeof r.discTs==='object'?r.discTs:{},bonusTs:r.bonusTs&&typeof r.bonusTs==='object'?r.bonusTs:{},_deleted:r._deleted&&typeof r._deleted==='object'?r._deleted:{},_notifsCleared:r._notifsCleared&&typeof r._notifsCleared==='object'?r._notifsCleared:{}}}
@@ -814,12 +812,13 @@ function lastMsgTs(msgs){if(!msgs||!msgs.length)return 0;var mx=0;msgs.forEach(f
 function fbGetNode(path,useEtag,retry){
     var h={};if(useEtag&&ETAGS[path])h['If-None-Match']=ETAGS[path];
     return fetchT(path+'?t='+Date.now()+fbAuthSuffix(),{headers:h},10000).then(function(r){
+        if(r.status<400)fbMarkUp();else fbMarkDown();
         var et=r.headers.get('ETag');if(et){ETAGS[path]=et;lsSet('fbETags',JSON.stringify(ETAGS))}
         if(r.status===304)return{nc:true};
         if((r.status===401||r.status===403)&&!retry){return fbReauth().then(function(ok){if(ok)return fbGetNode(path,useEtag,true);return{v:null,status:r.status}})}
         if(r.status>=400)return{v:null,status:r.status};
         return r.text().then(function(txt){var v=null;if(txt&&txt.trim()&&txt.trim()!=='null'&&txt.trim()!=='""'){try{v=JSON.parse(txt)}catch(e){}}return{v:v,status:r.status}});
-    });
+    }).catch(function(e){fbMarkDown();throw e});
 }
 function fbFetchCol(k){return fbGetNode(kvPath(COLS[k]),false).then(function(r){if(r.status>=400)throw new Error('http'+r.status);SHADOW[COLS[k]]=r.v===null?null:JSON.stringify(r.v);return r.v})}
 function photoCacheSave(){try{var ks=Object.keys(PHOTO_CACHE);if(ks.length>40){ks.sort(function(a,b){return(PHOTO_CACHE[a]._t||0)-(PHOTO_CACHE[b]._t||0)});ks.slice(0,ks.length-40).forEach(function(k){delete PHOTO_CACHE[k]})}}catch(e){}lsSet('photoCache',JSON.stringify(PHOTO_CACHE))}
@@ -836,16 +835,17 @@ function fetchMedia(mid){
         if(v){MEDIA_CACHE[mid]=v;updateOpenChat()}}).catch(function(){}).then(function(){delete mediaLoading[mid]});
 }
 function mirrorPush(payload,force){
-    var now=Date.now();if(!force&&now-mirrorLast<60000)return;mirrorLast=now;
+    var now=Date.now();if(!force&&now-mirrorLast<15000)return Promise.resolve(false);mirrorLast=now;
     function mergeTxt(txt){var m=payload;if(txt&&txt.trim()){try{m=JSON.stringify(syncMerge(JSON.parse(payload),JSON.parse(txt)))}catch(e){}}return m}
-    fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
-        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:mergeTxt(txt)},10000);
-    }).catch(function(){fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:payload},10000).catch(function(){})});
+    var p=fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:mergeTxt(txt)},10000).then(function(){return true});
+    }).catch(function(){return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:payload},10000).then(function(){return true}).catch(function(){return false})});
     (function(){
         function bw(body){if(blobId)fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000).catch(function(){})}
         if(!blobId){ensureBlob(function(ok){if(ok)bw(payload)});return}
         fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){bw(mergeTxt(txt))}).catch(function(){bw(payload)});
     })();
+    return p;
 }
 function hbFetch(){
     if(!FB_DB)return;
@@ -893,6 +893,45 @@ function fbReauth(){
     return fbReauthBusy;
 }
 var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0;
+var fbDirectFail=jGet('fbDirectFail',0);
+function fbIsDown(){return !!(fbDirectFail&&Date.now()-fbDirectFail<60000)}
+function fbMarkUp(){if(fbDirectFail){fbDirectFail=0;lsDel('fbDirectFail')}}
+function fbMarkDown(){var t=Date.now();if(t-fbDirectFail>5000){fbDirectFail=t;lsSet('fbDirectFail',String(t))}}
+function fbProxyGet(path){var enc=encodeURIComponent(path+(path.indexOf('?')>=0?'&':'?')+'auth='+encodeURIComponent(fbTok||''));
+    var urls=['https://api.allorigins.win/raw?url='+enc,'https://corsproxy.io/?url='+enc,'https://api.codetabs.com/v1/proxy?quest='+enc];
+    function t(i){if(i>=urls.length)return Promise.resolve(null);return fetchT(urls[i],{},10000).then(function(r){if(!r.ok)throw new Error('px');return r.json()}).catch(function(){return t(i+1)})}
+    return t(0);}
+function fbProxyPut(path,body,ct){return fetchT('https://corsproxy.io/?url='+encodeURIComponent(path+fbWriteSuffix()),{method:'PUT',headers:{'Content-Type':ct||'application/json'},body:body},12000)}
+function fbProxyChats(){
+    if(!CU)return Promise.resolve();
+    return fbProxyGet(KV+'/dlg/'+CU.id+'.json').then(function(idx){
+        if(!idx||typeof idx!=='object')return;
+        var need=[];
+        Object.keys(idx).forEach(function(cid){if(String(cid).indexOf('_')<0)return;var pr=cid.split('_');
+            if(+pr[0]!==CU.id&&+pr[1]!==CU.id)return;
+            if(String(idx[cid])===String(knownIdx[cid]||''))return;
+            var cur=lastMsgTs((DB.chats||{})[cid]);
+            if(!cur||idx[cid]>=cur)need.push(cid);
+            knownIdx[cid]=idx[cid];});
+        chatSeenSave();
+        if(!need.length)return;
+        return Promise.all(need.map(function(cid){return fbProxyGet(KV+'/chats/'+cid+'.json').then(function(v){if(v){var pc={};pc[cid]=v;applyRemote(mergeDB({chats:pc}))}}).catch(function(){})}));
+    });
+}
+function fbProxyPoll(){
+    fbProxyChats().catch(function(){});
+    fbProxyGet(KV+'/mt.json').then(function(mt){
+        if(!mt||typeof mt!=='object')return;
+        var need=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined&&mt[COLS[k]]!==seenMt[COLS[k]]});
+        if(!need.length)return;
+        return Promise.all(need.map(function(k){return fbProxyGet(kvPath(COLS[k])).then(function(v){return[k,v]}).catch(function(){return[k,undefined]})})).then(function(rs){
+            var partial={},ch=false;
+            rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];seenMt[COLS[x[0]]]=mt[COLS[x[0]]];ch=true}});
+            seenMtSave();
+            if(ch){applyRemote(mergeDB(partial));ensurePhotos();}
+        });
+    }).catch(function(){});
+}
 function pollFallback(){fbFallbackLast=Date.now();
     function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}
     function tryBlob(){if(!blobId)return;fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){})}
@@ -945,8 +984,9 @@ function doSave(){
     var changed=Object.keys(COLS).filter(function(k){return shadowDiff(k)});
     var chChanged=Object.keys(DB.chats||{}).filter(function(cid){return JSON.stringify(DB.chats[cid]||[])!==(SHADOW['chat:'+cid]||null)});
     var chDeleted=Object.keys(SHADOW).filter(function(k){return k.indexOf('chat:')===0}).map(function(k){return k.slice(5)}).filter(function(cid){return!(DB.chats&&DB.chats[cid]!==undefined)});
-    var reads=changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
-        .concat(chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}));
+    var fbDown=fbIsDown();
+    var reads=fbDown?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
+        .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}));
     Promise.all(reads).then(function(res){
         res.forEach(function(r){
             try{
@@ -955,36 +995,40 @@ function doSave(){
             }catch(e){}
         });
         var writes=[];var nowTs=Date.now();var pushOk=false;var hadWrites=false;
-        DB.users.forEach(function(u){if(u&&u.photo){var ph=u.photo;hadWrites=true;
-            writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},15000).then(function(){pushOk=true}).catch(function(){}));
+        DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
+            writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},10000).catch(function(){return fbProxyPut(KV+'/photos/'+u.uid+'.json',JSON.stringify(ph),'text/plain')}).then(function(){pushOk=true}).catch(function(){}));
             u.hasPhoto=1;delete u.photo;if(!PHOTO_CACHE[u.uid]){PHOTO_CACHE[u.uid]={d:ph,_t:Date.now()};photoCacheSave()}}});
-        changed.forEach(function(k){hadWrites=true;var body=JSON.stringify(DB[k]);
-            writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},15000)
-                .then(function(){pushOk=true;SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},15000)})
-                .then(function(){seenMt[COLS[k]]=nowTs;seenMtSave()}))});
-        chChanged.forEach(function(cid){hadWrites=true;var msgs=DB.chats[cid]||[];var mw=[];
+        changed.forEach(function(k){hadWrites=true;if(fbDown)return;var body=JSON.stringify(DB[k]);
+            writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000)
+                .catch(function(){return fbProxyPut(kvPath(COLS[k]),body,'application/json')})
+                .then(function(){pushOk=true;fbMarkUp();SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},10000).catch(function(){return fbProxyPut(KV+'/mt/'+COLS[k]+'.json',JSON.stringify(nowTs),'text/plain')})})
+                .then(function(){seenMt[COLS[k]]=nowTs;seenMtSave()}).catch(function(){fbMarkDown()}))});
+        chChanged.forEach(function(cid){hadWrites=true;if(fbDown)return;var msgs=DB.chats[cid]||[];var mw=[];
             msgs.forEach(function(m){if(m&&(m.img||m.video)&&!m.media){var mid='m'+(m.id||nowTs+Math.floor(Math.random()*9999));var mm={};if(m.img)mm.img=m.img;if(m.video)mm.video=m.video;
                 mw.push(fetchT(KV+'/media/'+mid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(mm)},15000).catch(function(){}));m.media=mid;delete m.img;delete m.video}});
             var body2=JSON.stringify(msgs);var lts=lastMsgTs(msgs)||nowTs;
-            writes.push(Promise.all(mw).then(function(){return fetchT(KV+'/chats/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body2},15000)})
-                .then(function(){pushOk=true;SHADOW['chat:'+cid]=body2;var pr=cid.split('_');return Promise.all([pr[0],pr[1]].map(function(uid2){return fetchT(KV+'/dlg/'+uid2+'/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(lts)},15000).catch(function(){})}))})
+            writes.push(Promise.all(mw).then(function(){return fetchT(KV+'/chats/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body2},10000).catch(function(){return fbProxyPut(KV+'/chats/'+cid+'.json',body2,'application/json')})})
+                .then(function(){pushOk=true;SHADOW['chat:'+cid]=body2;var pr=cid.split('_');return Promise.all([pr[0],pr[1]].map(function(uid2){return fetchT(KV+'/dlg/'+uid2+'/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(lts)},10000).catch(function(){return fbProxyPut(KV+'/dlg/'+uid2+'/'+cid+'.json',JSON.stringify(lts),'text/plain')}).catch(function(){})}))})
                 .then(function(){knownIdx[cid]=lts;chatSeenSave()}))});
-        chDeleted.forEach(function(cid){hadWrites=true;
+        chDeleted.forEach(function(cid){hadWrites=true;if(fbDown)return;
             writes.push(fetchT(KV+'/chats/'+cid+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})
                 .then(function(){delete SHADOW['chat:'+cid];var pr=cid.split('_');return Promise.all([pr[0],pr[1]].map(function(uid2){return fetchT(KV+'/dlg/'+uid2+'/'+cid+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})}))}).then(function(){pushOk=true}))});
         Object.keys(DB._notifs||{}).forEach(function(uid){var arr=(DB._notifs[uid]||[]).map(function(x){return(x&&NOTIF_STATE.read[uid]&&NOTIF_STATE.read[uid][x.id])?Object.assign({},x,{read:true}):x});var ncl=NOTIF_STATE.cleared[uid]||0;if(ncl)arr=arr.filter(function(x){return x&&new Date(x.time).getTime()>=ncl});var sj=JSON.stringify(arr);
-            if(sj!==(SHADOW['n:'+uid]||null)){hadWrites=true;
+            if(sj!==(SHADOW['n:'+uid]||null)){hadWrites=true;if(fbDown)return;
                 writes.push(fetchT(KV+'/notifs/'+uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:sj},15000).then(function(){pushOk=true;SHADOW['n:'+uid]=sj}).catch(function(){}))}});
         var finalPayload=JSON.stringify(DB);
         return Promise.allSettled(writes).then(function(){
             var ok=pushOk||!hadWrites;
-            showSync(false);
-            if(ok){offlineWarned=false;setOnlinePill();mirrorPush(finalPayload,false);ntfyPublish({type:'refresh'});}
-            else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}mirrorPush(finalPayload,true);fbReauth();setTimeout(function(){if(saving)return;doSave()},10000);}
-            var cbs=saveQueue.slice();saveQueue=[];
-            cbs.forEach(function(c){if(c)c()});
-            saving=false;
-            if(saveQueue.length)doSave();
+            return mirrorPush(finalPayload,!ok).then(function(mok){
+                if(!ok&&mok)ok=true;
+                showSync(false);
+                if(ok){offlineWarned=false;setOnlinePill();ntfyPublish({type:'refresh',cols:changed});}
+                else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}fbReauth();setTimeout(function(){if(saving)return;doSave()},10000);}
+                var cbs=saveQueue.slice();saveQueue=[];
+                cbs.forEach(function(c){if(c)c()});
+                saving=false;
+                if(saveQueue.length)doSave();
+            });
         });
     }).catch(function(){
         showSync(false);saveQueue.push(null);
@@ -1001,6 +1045,12 @@ function pollOnce(){
     if(saving||pollBusy||!FB_DB)return;
     pollBusy=true;var pollT0=Date.now();
     pollTick++;
+    if(fbIsDown()){
+        fbProxyPoll();
+        if(pollTick%5===0)pollFallback();
+        Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
+        return;
+    }
     var jobs=[];
     jobs.push(fbGetNode(KV+'/mt',true).then(function(r){
         if(r.nc){fbLastOk=Date.now();fbWarned=false;return}
@@ -1016,7 +1066,7 @@ function pollOnce(){
             if(ch){applyRemote(mergeDB(partial));ensurePhotos();}
         });
     }).catch(function(){
-        if(Date.now()-lastFallback>6000){lastFallback=Date.now();pollFallback();}
+        if(Date.now()-lastFallback>6000){lastFallback=Date.now();pollFallback();fbProxyPoll();}
         if(!fbWarned&&fbLastOk&&Date.now()-fbLastOk>15000){fbWarned=true;toast('☁️','Firebase недоступен — работаю через запасной канал','warning');}
     }));
     if(CU){
@@ -1039,10 +1089,11 @@ function pollOnce(){
                 jobs.push(fbGetNode(KV+'/chats/'+cid2,true).then(function(rr){if(rr.nc||!rr.v)return;var pc={};pc[cid2]=rr.v;applyRemote(mergeDB({chats:pc}))}).catch(function(){}));}}
     }
     if(pollTick%5===0)hbFetch();
+    if(pollTick%5===2){jobs.push(fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(txt&&txt.trim()&&txt.trim()!=='null'){try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}}).catch(function(){}));}
     Promise.all(jobs).catch(function(){}).then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
 }
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
-var liveSrc=null,liveOk=0;
+var liveSrc=null,liveOk=0,lastRefFetch=0;
 function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
 function startLive(){
     if(liveSrc||!window.EventSource)return;
@@ -1056,7 +1107,7 @@ function startLive(){
                     publishPresence();if(m.msg&&m.msg.id)applyLiveMsg(m.msg);pollOnce();
                     var ov=document.getElementById('chatOverlay');
                     if(!(ov&&parseInt(ov.dataset.partner,10)===m.fromId))toast('💬','Новое сообщение от '+(m.fromName||'?'),'info');
-                } else if(m.type==='hb'&&m.id&&m.v&&m.id!==CU.id){var hp=DB.presence||{};if(!hp[m.id]||(hp[m.id].ts||0)<(m.v.ts||0)){hp[m.id]=m.v;DB.presence=hp;setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}}else if(m.type==='refresh'){publishPresence();pollOnce();}
+                } else if(m.type==='hb'&&m.id&&m.v&&m.id!==CU.id){var hp=DB.presence||{};if(!hp[m.id]||(hp[m.id].ts||0)<(m.v.ts||0)){hp[m.id]=m.v;DB.presence=hp;setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}}else if(m.type==='refresh'){publishPresence();if(m.cols&&m.cols.length&&Date.now()-lastRefFetch>3000){lastRefFetch=Date.now();Promise.all(m.cols.map(function(ck){return (fbIsDown()?Promise.reject(new Error('down')):fbFetchCol(ck)).then(function(v){return[ck,v]}).catch(function(){return fbProxyGet(kvPath(COLS[ck])).then(function(v){return[ck,v]}).catch(function(){return[ck,undefined]})})})).then(function(rs){var partial={},ch=false;rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];ch=true}});if(ch){applyRemote(mergeDB(partial));ensurePhotos();}}).catch(function(){});}pollOnce();}
             }catch(e){}
         };
     }catch(e){liveSrc=null}
@@ -1105,17 +1156,18 @@ function toast(t,m,type){type=type||'info';var c=document.getElementById('toastC
 function hardResetCache(){confirm2('Сбросить локальный кэш устройства? Приложение перезагрузится, нужно будет заново войти в аккаунт.',function(){try{localStorage.clear()}catch(e){}try{location.reload(true)}catch(e){location.href=location.href}})}
 function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—';
     if(fbLastOk){var d=Math.round((now-fbLastOk)/1000);fbSt=d<25?'✅ OK ('+d+' сек назад)':'⚠️ нет связи '+(d>=90?Math.round(d/60)+' мин':d+' сек');}
-    if(fbLastOk&&now-fbLastOk<25000)fbCh='Firebase (основной)';else if(fbFallbackLast&&now-fbFallbackLast<120000)fbCh='запасной (textdb/blob)';
+    if(fbLastOk&&now-fbLastOk<25000)fbCh='Firebase (основной)';else if(fbFallbackLast&&now-fbFallbackLast<120000)fbCh='запасной (textdb/blob)';else if(fbIsDown())fbCh='прокси/зеркала (прямой канал недоступен)';
     var hb=lastHbSent?(Math.round((now-lastHbSent)/1000)+' сек назад'):'ещё не отправлялся';
     var who=CU?(safeName(CU)+' · id '+CU.id+' · '+(roleOf(CU)||'')):'❌ не залогинен — онлайн-пульс не отправляется';
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v29</b></div>'
+    +'<div>Версия приложения: <b>v30</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
     +'<div>Канал данных: <b>'+fbCh+'</b></div>'
+    +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
     +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
     +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
@@ -1123,7 +1175,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     document.body.appendChild(o);
 }
 function confirm2(msg,cb){var o=document.createElement('div');o.className='modal-overlay';o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">⚠️ Подтверждение</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div><p style="margin:12px 0;color:var(--text-secondary)">'+msg+'</p><button class="btn btn-danger" id="cy">Да</button><button class="btn btn-gray" id="cn">Отмена</button></div>';document.body.appendChild(o);o.querySelector('#cy').onclick=function(){o.remove();cb()};o.querySelector('#cn').onclick=function(){o.remove()}}
-function showLightning(){var l=document.getElementById('lightning');if(!l)return;l.style.display='flex';l.style.animation='none';setTimeout(function(){l.style.animation='lightBlink .8s ease-out'},10);setTimeout(function(){l.style.display='none'},800)}
+
 
 
 /* ================= ГЕО + IP (для "одной сети") ================= */
@@ -1134,7 +1186,7 @@ function publishPresence(){
     if(!CU)return;
     var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
     DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
-    if(FB_DB)fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbReauth()});
+    if(FB_DB&&!fbIsDown())fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbMarkDown();fbReauth()});
 }
 function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||!CU)return;var pid=parseInt(ov.dataset.partner,10);if(!pid)return;var cid=getChatId(CU.id,pid);var msgs=(DB.chats||{})[cid]||[];var mb=document.getElementById('chatMsgs');if(!mb)return;var atBottom=mb.scrollHeight-mb.scrollTop-mb.clientHeight<80;mb.innerHTML=renderMsgs(msgs);if(atBottom)mb.scrollTop=mb.scrollHeight;msgs.forEach(function(m){if(m.toId===CU.id&&!m.read)m.read=true});}
 
@@ -1156,7 +1208,6 @@ document.addEventListener('DOMContentLoaded',function(){
     });});
     initFx();
     renderCarousel();
-    setInterval(function(){showLightning();},30000);
 });
 window.addEventListener('beforeunload',function(){if(CU&&FB_DB){delete DB.presence[CU.id];try{fetch(KV+'/hb/'+CU.id+'.json?auth='+encodeURIComponent(fbTok||''),{method:'DELETE',keepalive:true}).catch(function(){})}catch(e){}}});
 window.addEventListener('error',function(e){console.log('[КАРАВАН]',e&&e.message)});
