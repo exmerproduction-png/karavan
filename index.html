@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v34</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v35</p>
     </footer>
 </div>
 
@@ -845,7 +845,7 @@ function fetchMedia(mid){
     function done(v){if(v){MEDIA_CACHE[mid]=v;updateOpenChat()}}
     fetchT(mp+'?t='+Date.now()+fbAuthSuffix(),{},12000).then(function(r){return r.text()}).then(function(t){var v=null;try{v=JSON.parse(t)}catch(e){}
         if(!v)throw new Error('no media');return v}).then(done).catch(function(){
-        var viaRelay=relayOk?fetchT(RELAY+'?m=GET&u='+encodeURIComponent(mp+fbAuthSuffix()),{method:'POST'},25000).then(function(r){if(r.status>=400)throw new Error('relay '+r.status);return r.text()}).then(function(t){var v=null;try{v=JSON.parse(t)}catch(e){}if(!v)throw new Error('no media');return v}):Promise.reject(new Error('no relay'));
+        var viaRelay=relayOk?relaySend(mp+fbAuthSuffix(),'GET','').then(function(r){return r.text()}).then(function(t){var v=null;try{v=JSON.parse(t)}catch(e){}if(!v)throw new Error('no media');return v}):Promise.reject(new Error('no relay'));
         return viaRelay.then(done).catch(function(){return fbProxyGet(mp).then(function(v){if(v)done(v)})});
     }).then(function(){delete mediaLoading[mid]});
 }
@@ -919,8 +919,10 @@ var relayOk=false,relayChecked=0;
 function relayProbe(){
     if(!FB_DB)return;fetchT(RELAY+'?ping=1&t='+Date.now(),{},8000).then(function(r){return r.json()}).then(function(j){relayOk=!!(j&&j.ok);relayChecked=Date.now();}).catch(function(){relayOk=false;relayChecked=Date.now();});
 }
-function relaySend(fbu,method,body){
-    return fetchT(RELAY+'?m='+method+'&u='+encodeURIComponent(fbu),{method:'POST',headers:{'Content-Type':'application/json'},body:body||''},12000).then(function(r){if(r.status>=400)throw new Error('relay '+r.status);return r});
+var relayChain=Promise.resolve(),relayLastCall=0;
+function relayLimit(fn){var go=relayChain.then(function(){var w=Math.max(0,1200-(Date.now()-relayLastCall));return new Promise(function(res){setTimeout(res,w)})}).then(fn).then(function(r){relayLastCall=Date.now();return r},function(e){relayLastCall=Date.now();throw e});relayChain=go.catch(function(){});return go}
+function relaySend(fbu,method,body,to){
+    return relayLimit(function(){return fetchT(RELAY+'?m='+method+'&u='+encodeURIComponent(fbu),{method:'POST',headers:{'Content-Type':'application/json'},body:body||''},to||12000).then(function(r){if(r.status>=400)throw new Error('relay '+r.status);return r})});
 }
 function fbProxyGet(path){if(!fbTok)return Promise.resolve(null);var enc=encodeURIComponent(path+(path.indexOf('?')>=0?'&':'?')+'auth='+encodeURIComponent(fbTok));
     var urls=(relayOk?[RELAY+'?u='+enc]:[]).concat(['https://api.allorigins.win/raw?url='+enc,'https://corsproxy.io/?url='+enc,'https://api.codetabs.com/v1/proxy?quest='+enc]);
@@ -1095,7 +1097,7 @@ function pollOnce(){
     pollBusy=true;var pollT0=Date.now();
     pollTick++;
     if(fbIsDown()){
-        fbProxyPoll();
+        if(pollTick%2)fbProxyPoll();
         if(pollTick%5===0)pollFallback();
         Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
         return;
@@ -1211,7 +1213,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v34</b></div>'
+    +'<div>Версия приложения: <b>v35</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
