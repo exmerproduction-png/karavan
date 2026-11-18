@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v41</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v42</p>
     </footer>
 </div>
 
@@ -1076,7 +1076,7 @@ function doSave(){
         var finalPayload=JSON.stringify(DB);
         return Promise.allSettled(writes).then(function(){
             var ok=pushOk||!hadWrites;
-            return mirrorPush(finalPayload,!ok).then(function(mok){
+            return (ok?Promise.resolve(false):mirrorPush(finalPayload,true)).then(function(mok){
                 if(!ok&&mok)ok=true;
                 showSync(false);
                 if(ok){offlineWarned=false;setOnlinePill();saveSnapshot();ntfyPublish({type:'refresh',cols:changed});}
@@ -1225,7 +1225,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v41</b></div>'
+    +'<div>Версия приложения: <b>v42</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
