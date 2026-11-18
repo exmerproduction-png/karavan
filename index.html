@@ -714,7 +714,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v46</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v47</p>
     </footer>
 </div>
 
@@ -1045,9 +1045,8 @@ function doSave(){
     var chChanged=Object.keys(DB.chats||{}).filter(function(cid){return JSON.stringify(DB.chats[cid]||[])!==(SHADOW['chat:'+cid]||null)});
     var chDeleted=Object.keys(SHADOW).filter(function(k){return k.indexOf('chat:')===0}).map(function(k){return k.slice(5)}).filter(function(cid){return!(DB.chats&&DB.chats[cid]!==undefined)});
     var fbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
-    /* v46: RTDB-стрим свеж (strеam жил <10с) → данные уже смержены, чтение перед записью НЕ нужно — сейв вдвое быстрее */
-    var rtFresh=rtOk&&Date.now()-rtOk<10000;
-    var reads=(fbDown||rtFresh)?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
+    /* v47: ОТКАТ опасной части v46 — чтение перед записью ВСЕГДА (без префлайта устаревшая копия устройства затирала users на облаке) */
+    var reads=fbDown?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
         .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}));
     Promise.all(reads).then(function(res){
         res.forEach(function(r){
@@ -1056,8 +1055,8 @@ function doSave(){
                 else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}
             }catch(e){}
         });
-        var remoteUsersN=rtFresh?(DB.users?DB.users.filter(Boolean).length:0):0;
-        var usersRemote=(fbDown||rtFresh)?null:reads.filter(function(x){return x.k==='users'&&x.v})[0];
+        var remoteUsersN=0;
+        var usersRemote=fbDown?null:reads.filter(function(x){return x.k==='users'&&x.v})[0];
         if(usersRemote&&usersRemote.v){var ua=Array.isArray(usersRemote.v)?usersRemote.v:null;remoteUsersN=ua?ua.filter(Boolean).length:Object.keys(usersRemote.v).length;}
         var writes=[];var nowTs=Date.now();var pushOk=false;var hadWrites=false;
         DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
@@ -1263,7 +1262,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v46</b></div>'
+    +'<div>Версия приложения: <b>v47</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
