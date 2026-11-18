@@ -714,7 +714,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v47</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v48</p>
     </footer>
 </div>
 
@@ -965,6 +965,7 @@ function fbProxyPoll(){
     var pxJobs=[fbProxyChats().catch(function(){}),
         fbProxyGet(KV+'/mt.json').then(function(mt){
         if(!mt||typeof mt!=='object')return;
+        if(mt.wipe)applyWipe(mt.wipe);
         var need=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined&&mt[COLS[k]]!==seenMt[COLS[k]]});
         if(!need.length)return;
         return Promise.all(need.map(function(k){return fbProxyGet(kvPath(COLS[k])).then(function(v){return[k,v]}).catch(function(){return[k,undefined]})})).then(function(rs){
@@ -977,7 +978,7 @@ function fbProxyPoll(){
     Promise.all(pxJobs).catch(function(){}).then(function(){pxPollBusy=false});
 }
 function pollFallback(){fbFallbackLast=Date.now();
-    function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}
+    function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;if(WIPE_ACK&&Date.now()-WIPE_ACK<300000)return;try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}/* v48: после очистки старое зеркало не воскресает данные */
     function tryBlob(){if(!blobId)return;fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){})}
     fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
         if(txt&&txt.trim()){done(txt);fetchRegistry(function(){});}
@@ -1046,23 +1047,27 @@ function doSave(){
     var chDeleted=Object.keys(SHADOW).filter(function(k){return k.indexOf('chat:')===0}).map(function(k){return k.slice(5)}).filter(function(cid){return!(DB.chats&&DB.chats[cid]!==undefined)});
     var fbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
     /* v47: ОТКАТ опасной части v46 — чтение перед записью ВСЕГДА (без префлайта устаревшая копия устройства затирала users на облаке) */
-    var reads=fbDown?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
-        .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}));
+    /* v48: после полной очистки (свежий wipe < 2 мин) пустая база — источник правды: чтения не мержим, shrink-guard отключён, старые данные не возвращаем */
+    var wipeFresh=WIPE_ACK&&Date.now()-WIPE_ACK<120000;
+    var reads=(fbDown||wipeFresh)?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
+        .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}))
+        .concat((fbDown||wipeFresh)?[]:[fbGetNode(KV+'/wipe',false).then(function(r){return{wipe:r.v}}).catch(function(){return{wipe:undefined}})]);
     Promise.all(reads).then(function(res){
         res.forEach(function(r){
             try{
                 if(r.k!==undefined){if(r.v!==null&&r.v!==undefined){var pp={};pp[r.k]=r.v;DB=syncMerge(DB,pp)}}
                 else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}
+                else if(r.wipe!==undefined&&r.wipe)applyWipe(r.wipe)
             }catch(e){}
         });
         var remoteUsersN=0;
-        var usersRemote=fbDown?null:reads.filter(function(x){return x.k==='users'&&x.v})[0];
+        var usersRemote=(fbDown||wipeFresh)?null:reads.filter(function(x){return x.k==='users'&&x.v})[0];
         if(usersRemote&&usersRemote.v){var ua=Array.isArray(usersRemote.v)?usersRemote.v:null;remoteUsersN=ua?ua.filter(Boolean).length:Object.keys(usersRemote.v).length;}
         var writes=[];var nowTs=Date.now();var pushOk=false;var hadWrites=false;
         DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
             writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},10000).catch(function(){return fbProxyPut(KV+'/photos/'+u.uid+'.json',JSON.stringify(ph),'text/plain')}).then(function(){pushOk=true}).catch(function(){}));
             u.hasPhoto=1;delete u.photo;if(!PHOTO_CACHE[u.uid]){PHOTO_CACHE[u.uid]={d:ph,_t:Date.now()};photoCacheSave()}}});
-        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
+        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(!wipeFresh&&k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
             writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000)
                 .catch(function(){return fbProxyPut(kvPath(COLS[k]),body,'application/json')})
                 .then(function(){pushOk=true;fbMarkUp();SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},10000).catch(function(){return fbProxyPut(KV+'/mt/'+COLS[k]+'.json',JSON.stringify(nowTs),'text/plain')})})
@@ -1123,6 +1128,8 @@ function pollOnce(){
         if(r.status>=400)throw new Error('http'+r.status);
         fbLastOk=Date.now();fbWarned=false;
         var mt=r.v||{};
+        /* v48: маркер полной очистки — любые устройства мгновенно сбрасывают локальные копии (не воскресают) */
+        if(mt.wipe)applyWipe(mt.wipe);
         var need=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined&&mt[COLS[k]]!==seenMt[COLS[k]]});
         if(!need.length)return;
         return Promise.all(need.map(function(k){return fbFetchCol(k).then(function(v){return[k,v]})})).then(function(rs){
@@ -1262,7 +1269,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v47</b></div>'
+    +'<div>Версия приложения: <b>v48</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1585,7 +1592,21 @@ function clearSig(){var c=document.getElementById('sigCanvas');if(c)c.getContext
 function saveSig(id){var c=document.getElementById('sigCanvas');if(!c)return;var t=document.getElementById(id);if(t)t.innerHTML='<img src="'+c.toDataURL()+'">';var m=c.closest('.modal-overlay');if(m)m.remove();}
 function loadAdminChats(){return}
 function renderComplaints(){var c=document.getElementById('adminComplaints');if(!c)return;var comp=(DB.complaints||[]).slice().reverse();if(!comp.length){c.innerHTML='<p style="color:var(--text-secondary);font-size:13px">Жалоб нет</p>';return}c.innerHTML=comp.map(function(x){return'<div class="user-admin-card"><div style="font-weight:700;font-size:12px">⚠️ '+escHtml(x.from)+' → курьер '+escHtml(x.courierName)+'</div><div style="font-size:11px;color:var(--text-secondary)">Заказ '+x.orderNumber+' · '+x.date+'</div><p style="font-size:12px;margin-top:6px">'+escHtml(x.text)+'</p></div>'}).join('');}
-function clearAllData(){confirm2('УДАЛИТЬ ВСЮ ОБЛАЧНУЮ БАЗУ? Это затронет ВСЕ устройства!',function(){confirm2('Точно? Необратимо!',function(){DB={users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{},statsOffsetTs:{},discTs:{},_deleted:{},_notifsCleared:{}};SHADOW={};knownIdx={};seenMt={};seenMtSave();chatSeenSave();lsDel('localOrders');if(FB_DB){['chats','dlg','notifs','media'].forEach(function(nn){fetchT(KV+'/'+nn+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})});}cloudSave(function(){toast('✅','База очищена','success');refreshAll();});});})}
+var WIPE_ACK=parseInt(lsGet('wipeSeen')||'0',10)||0;
+function wipeSkeleton(){return {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{},statsOffsetTs:{},discTs:{},bonusTs:{},_deleted:{},_notifsCleared:{}}}
+function applyWipe(ts){ts=parseInt(ts,10)||0;if(!ts||ts<=WIPE_ACK)return;WIPE_ACK=ts;lsSet('wipeSeen',String(ts));
+    DB=wipeSkeleton();SHADOW={};knownIdx={};seenMt={};seenMtSave();chatSeenSave();lsDel('localOrders');lsDel('lastDB');
+    try{photoCacheSave()}catch(e){}
+    try{refreshAll()}catch(e){}toast('🧹','База очищена на другом устройстве — локальный кэш сброшен','info');}
+function clearAllData(){confirm2('УДАЛИТЬ ВСЮ ОБЛАЧНУЮ БАЗУ? Это затронет ВСЕ устройства!',function(){confirm2('Точно? Необратимо!',function(){var wts=Date.now();WIPE_ACK=wts;lsSet('wipeSeen',String(wts));
+    DB=wipeSkeleton();SHADOW={};knownIdx={};seenMt={};seenMtSave();chatSeenSave();lsDel('localOrders');lsDel('lastDB');
+    if(FB_DB){
+        ['chats','dlg','notifs','media','photos'].forEach(function(nn){fetchT(KV+'/'+nn+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})});
+        /* маркер очистки: мгновенно по RTDB-стриму + переживает пустые колонки */
+        fetchT(KV+'/wipe.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(wts)},15000).catch(function(){});
+        fetchT(KV+'/mt/wipe.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(wts)},15000).catch(function(){});
+    }
+    cloudSave(function(){toast('✅','База очищена на всех устройствах','success');refreshAll();});});})}
 
 
 /* ================= ЧАТЫ ================= */
