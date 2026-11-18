@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v39</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v40</p>
     </footer>
 </div>
 
@@ -808,7 +808,7 @@ function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/acc
 function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},10000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)}).catch(function(){if(!fbRef)throw new Error('noref');return fbRefreshProxy()})}
 function fbSignupProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},12000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error('pxauth');return fbSaveTok(j)})}
 function fbRefreshProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://securetoken.googleapis.com/v1/token?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},12000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('pxrefresh');return fbSaveTok(j)})}
-function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);var chain=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});return chain.catch(function(e){if(FB_SECRET){fbTokMode='secret';return FB_SECRET}throw e})}
+function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var chain=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});return chain.catch(function(e){if(FB_SECRET){fbSetTokMode('secret');return FB_SECRET}throw e})}
 /* ================= v22: по-коллекционное хранилище Firebase ================= */
 var KV=(FB_DB?fbUrl():'')+'/kv';
 var COLS={users:'users',orders:'orders',announcements:'ann',bonusRequests:'breq',complaints:'comp',reviews:'rev',customProducts:'prods',promos:'promos',discounts:'disc',discTs:'discTs',bonusTs:'bonusTs',bonuses:'bon',pinned:'pin',muted:'muted',statsOffset:'so',statsOffsetTs:'soTs',_deleted:'tomb',_notifsCleared:'nclear'};
@@ -908,11 +908,13 @@ function fbReauth(){
     if(Date.now()-fbLastReauth<60000)return fbReauthBusy||Promise.resolve(false);
     fbLastReauth=Date.now();
     fbTok=null;fbRef=null;fbTokExp=0;lsDel('fbTok');lsDel('fbRef');
-    fbReauthBusy=fbSignup().catch(function(){return fbSignupProxy()}).then(function(){fbReauthBusy=null;return true}).catch(function(){fbReauthBusy=null;return false});
+    fbReauthBusy=fbSignup().catch(function(){return fbSignupProxy()}).then(function(){fbReauthBusy=null;return true}).catch(function(){fbReauthBusy=null;if(FB_SECRET){fbSetTokMode('secret');return true}return false});
     return fbReauthBusy;
 }
 var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0;
-var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode='';
+var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
+function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
+function fbTryGoogleAuth(){if(!FB_KEY)return Promise.resolve(null);var p=fbSignup().catch(function(){return fbSignupProxy()}).then(function(tok){if(tok){fbSetTokMode('');return tok}throw new Error('noauth')});p.catch(function(){});return p}
 function fbDownWindow(){return [60000,120000,300000,600000][Math.min(fbFailStreak||0,3)]||60000}
 function fbIsDown(){return !!(fbDirectFail&&Date.now()-fbDirectFail<fbDownWindow())}
 function fbMarkUp(){if(fbDirectFail||fbFailStreak){fbDirectFail=0;fbFailStreak=0;lsDel('fbDirectFail');lsDel('fbFailStreak');}}
@@ -1038,7 +1040,7 @@ function doSave(){
     var changed=Object.keys(COLS).filter(function(k){return shadowDiff(k)});
     var chChanged=Object.keys(DB.chats||{}).filter(function(cid){return JSON.stringify(DB.chats[cid]||[])!==(SHADOW['chat:'+cid]||null)});
     var chDeleted=Object.keys(SHADOW).filter(function(k){return k.indexOf('chat:')===0}).map(function(k){return k.slice(5)}).filter(function(cid){return!(DB.chats&&DB.chats[cid]!==undefined)});
-    var fbDown=fbIsDown();
+    var fbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
     var reads=fbDown?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
         .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}));
     Promise.all(reads).then(function(res){
@@ -1100,6 +1102,7 @@ function pollOnce(){
     pollBusy=true;var pollT0=Date.now();
     pollTick++;
     if(fbIsDown()){
+        if(FB_SECRET&&pollTick%3===1)fbGetNode(KV+'/mt',true).catch(function(){});
         if(pollTick%2)fbProxyPoll();
         if(pollTick%5===0)pollFallback();
         Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
@@ -1216,7 +1219,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v39</b></div>'
+    +'<div>Версия приложения: <b>v40</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1243,7 +1246,8 @@ function publishPresence(){
     if(!CU)return;
     var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
     DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
-    if(FB_DB&&!fbIsDown())fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbMarkDown();if(relayOk)relaySend(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),'PUT',JSON.stringify(v)).catch(function(){});fbReauth();mirrorPush(JSON.stringify(DB),false)});else mirrorPush(JSON.stringify(DB),false);
+    var hbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
+    if(FB_DB&&!hbDown)fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbMarkDown();if(relayOk)relaySend(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),'PUT',JSON.stringify(v)).catch(function(){});fbReauth();mirrorPush(JSON.stringify(DB),false)});else mirrorPush(JSON.stringify(DB),false);
 }
 function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||!CU)return;var pid=parseInt(ov.dataset.partner,10);if(!pid)return;var cid=getChatId(CU.id,pid);var msgs=(DB.chats||{})[cid]||[];var mb=document.getElementById('chatMsgs');if(!mb)return;msgs.forEach(function(m){if(m.toId===CU.id&&!m.read){m.read=true;CHAT_READ[m.id]=1}});chatReadSave();var sig=msgs.length+':'+msgs.map(function(m){return m.id+(m.read?'r':'u')+(m.media?'m':'')}).join('|');if(sig===ov._chatSig)return;var firstTime=!ov._chatSig;ov._chatSig=sig;var atBottom=firstTime||mb.scrollHeight-mb.scrollTop-mb.clientHeight<80;mb.innerHTML=renderMsgs(msgs);if(atBottom)mb.scrollTop=mb.scrollHeight;}
 
