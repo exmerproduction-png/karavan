@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v42</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v43</p>
     </footer>
 </div>
 
@@ -809,7 +809,7 @@ function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/tok
 function fbSignupProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},8000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error('pxauth');return fbSaveTok(j)})}
 function fbRefreshProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://securetoken.googleapis.com/v1/token?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},8000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('pxrefresh');return fbSaveTok(j)})}
 function fbSecretProbe(){if(!FB_SECRET)return Promise.reject(new Error('nosecret'));var pp=fbUrl()+'/kv/mt.json?t='+Date.now()+'&auth='+encodeURIComponent(FB_SECRET);return fetchT(pp,{},5000).then(function(r){if(r.status>=400)throw new Error('probe '+r.status);fbSetTokMode('secret');return FB_SECRET})}
-function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var slow=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});if(FB_SECRET){return Promise.race([slow.then(function(t){return t||null},function(){return null}),fbSecretProbe().then(function(t){return t||null},function(){return null})]).then(function(t){if(t)return t;fbSetTokMode('secret');return FB_SECRET})}return slow.catch(function(e){throw e})}
+function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000){if(FB_SECRET&&fbTokMode!=='secret')fbSecretProbe().catch(function(){});return Promise.resolve(fbTok)}if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var slow=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});if(FB_SECRET){return Promise.race([slow.then(function(t){return t||null},function(){return null}),fbSecretProbe().then(function(t){return t||null},function(){return null})]).then(function(t){if(t)return t;fbSetTokMode('secret');return FB_SECRET})}return slow.catch(function(e){throw e})}
 /* ================= v22: по-коллекционное хранилище Firebase ================= */
 var KV=(FB_DB?fbUrl():'')+'/kv';
 var COLS={users:'users',orders:'orders',announcements:'ann',bonusRequests:'breq',complaints:'comp',reviews:'rev',customProducts:'prods',promos:'promos',discounts:'disc',discTs:'discTs',bonusTs:'bonusTs',bonuses:'bon',pinned:'pin',muted:'muted',statsOffset:'so',statsOffsetTs:'soTs',_deleted:'tomb',_notifsCleared:'nclear'};
@@ -820,7 +820,7 @@ function kvPath(k){return KV+'/'+k+'.json'}
 function shadowDiff(k){return safeStr(DB[k])!==(SHADOW[k]||null)}
 function lastMsgTs(msgs){if(!msgs||!msgs.length)return 0;var mx=0;msgs.forEach(function(m){var t=new Date(m.time).getTime();if(t>mx)mx=t});return mx}
 function fbGetNode(path,useEtag,retry){
-    var h={};if(useEtag&&ETAGS[path])h['If-None-Match']=ETAGS[path];
+    var h={};if(useEtag&&fbTokMode!=='secret'&&ETAGS[path])h['If-None-Match']=ETAGS[path];
     return fetchT(path+'?t='+Date.now()+fbAuthSuffix(),{headers:h},10000).then(function(r){
         if(r.status<400)fbMarkUp();else fbMarkDown();
         var et=r.headers.get('ETag');if(et){ETAGS[path]=et;lsSet('fbETags',JSON.stringify(ETAGS))}
@@ -1051,11 +1051,14 @@ function doSave(){
                 else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}
             }catch(e){}
         });
+        var remoteUsersN=0;
+        var usersRemote=reads.filter(function(x){return x.k==='users'&&x.v})[0];
+        if(usersRemote&&usersRemote.v){var ua=Array.isArray(usersRemote.v)?usersRemote.v:null;remoteUsersN=ua?ua.filter(Boolean).length:Object.keys(usersRemote.v).length;}
         var writes=[];var nowTs=Date.now();var pushOk=false;var hadWrites=false;
         DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
             writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},10000).catch(function(){return fbProxyPut(KV+'/photos/'+u.uid+'.json',JSON.stringify(ph),'text/plain')}).then(function(){pushOk=true}).catch(function(){}));
             u.hasPhoto=1;delete u.photo;if(!PHOTO_CACHE[u.uid]){PHOTO_CACHE[u.uid]={d:ph,_t:Date.now()};photoCacheSave()}}});
-        changed.forEach(function(k){hadWrites=true;if(fbDown)return;var body=JSON.stringify(DB[k]);
+        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
             writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000)
                 .catch(function(){return fbProxyPut(kvPath(COLS[k]),body,'application/json')})
                 .then(function(){pushOk=true;fbMarkUp();SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},10000).catch(function(){return fbProxyPut(KV+'/mt/'+COLS[k]+'.json',JSON.stringify(nowTs),'text/plain')})})
@@ -1225,7 +1228,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v42</b></div>'
+    +'<div>Версия приложения: <b>v43</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1267,6 +1270,7 @@ document.addEventListener('DOMContentLoaded',function(){
     fetchGeo();
     fbAuthInit().catch(function(){}).then(function(){cloudLoad(function(){
         if(CU){var f=findUserById(CU.id);if(f){CU=f;lsSet('CU',JSON.stringify(CU));}}
+        setTimeout(function(){if(CU)cloudSave()},8000);
         setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},600)}},1500);
         refreshAll();startPolling();startLive();publishPresence();hbFetch();
         setInterval(publishPresence,30000);
