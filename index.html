@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v40</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v41</p>
     </footer>
 </div>
 
@@ -804,11 +804,12 @@ function fbUrl(){return FB_DB.replace(/\/$/,'')}
 function fbAuthSuffix(){return fbTok?'&auth='+encodeURIComponent(fbTok):(FB_SECRET?'&auth='+encodeURIComponent(FB_SECRET):'')}
 function fbWriteSuffix(){return fbTok?'?auth='+encodeURIComponent(fbTok):(FB_SECRET?'?auth='+encodeURIComponent(FB_SECRET):'')}
 function fbSaveTok(j){fbTok=j.idToken||j.id_token;fbRef=j.refreshToken||j.refresh_token;fbTokExp=Date.now()+((parseInt(j.expiresIn||j.expires_in,10)||3600)-5)*1000;lsSet('fbTok',JSON.stringify(fbTok));lsSet('fbRef',JSON.stringify(fbRef));return fbTok}
-function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},10000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error((j.error&&j.error.message)||'auth');return fbSaveTok(j)})}
-function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},10000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)}).catch(function(){if(!fbRef)throw new Error('noref');return fbRefreshProxy()})}
-function fbSignupProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},12000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error('pxauth');return fbSaveTok(j)})}
-function fbRefreshProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://securetoken.googleapis.com/v1/token?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},12000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('pxrefresh');return fbSaveTok(j)})}
-function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var chain=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});return chain.catch(function(e){if(FB_SECRET){fbSetTokMode('secret');return FB_SECRET}throw e})}
+function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},5000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error((j.error&&j.error.message)||'auth');return fbSaveTok(j)})}
+function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},6000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)}).catch(function(){if(!fbRef)throw new Error('noref');return fbRefreshProxy()})}
+function fbSignupProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},8000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error('pxauth');return fbSaveTok(j)})}
+function fbRefreshProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://securetoken.googleapis.com/v1/token?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},8000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('pxrefresh');return fbSaveTok(j)})}
+function fbSecretProbe(){if(!FB_SECRET)return Promise.reject(new Error('nosecret'));var pp=fbUrl()+'/kv/mt.json?t='+Date.now()+'&auth='+encodeURIComponent(FB_SECRET);return fetchT(pp,{},5000).then(function(r){if(r.status>=400)throw new Error('probe '+r.status);fbSetTokMode('secret');return FB_SECRET})}
+function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000)return Promise.resolve(fbTok);if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var slow=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});if(FB_SECRET){return Promise.race([slow.then(function(t){return t||null},function(){return null}),fbSecretProbe().then(function(t){return t||null},function(){return null})]).then(function(t){if(t)return t;fbSetTokMode('secret');return FB_SECRET})}return slow.catch(function(e){throw e})}
 /* ================= v22: по-коллекционное хранилище Firebase ================= */
 var KV=(FB_DB?fbUrl():'')+'/kv';
 var COLS={users:'users',orders:'orders',announcements:'ann',bonusRequests:'breq',complaints:'comp',reviews:'rev',customProducts:'prods',promos:'promos',discounts:'disc',discTs:'discTs',bonusTs:'bonusTs',bonuses:'bon',pinned:'pin',muted:'muted',statsOffset:'so',statsOffsetTs:'soTs',_deleted:'tomb',_notifsCleared:'nclear'};
@@ -1105,6 +1106,7 @@ function pollOnce(){
         if(FB_SECRET&&pollTick%3===1)fbGetNode(KV+'/mt',true).catch(function(){});
         if(pollTick%2)fbProxyPoll();
         if(pollTick%5===0)pollFallback();
+        if(pollTick%4===0)ntfyJsonPoll();
         Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
         return;
     }
@@ -1126,6 +1128,7 @@ function pollOnce(){
         if(Date.now()-lastFallback>6000){lastFallback=Date.now();pollFallback();fbProxyPoll();}
         if(!fbWarned&&fbLastOk&&Date.now()-fbLastOk>15000){fbWarned=true;toast('☁️','Firebase недоступен — работаю через запасной канал','warning');}
     }));
+    if(!liveOk&&pollTick%4===0)ntfyJsonPoll();
     if(CU){
         jobs.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(r){if(r.nc||(r.status&&r.status>=400)||!r.v)return;var o={};o[CU.id]=r.v;applyRemote(mergeDB({_notifs:o}))}).catch(function(){}));
         jobs.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(r){
@@ -1156,9 +1159,12 @@ function startLive(){
     if(liveSrc||!window.EventSource)return;
     try{
         liveSrc=new EventSource(NTFY_URL+'/'+NTFY_TOPIC+'/sse');liveSrc.onopen=function(){liveOk=Date.now()};liveSrc.onerror=function(){liveOk=0};
-        liveSrc.onmessage=function(ev){
+        liveSrc.onmessage=function(ev){var d=null;try{d=JSON.parse(ev.data)}catch(e){return}handleLiveMsg(d)};
+    }catch(e){liveSrc=null}
+}
+function handleLiveMsg(d){
             try{
-                var d=JSON.parse(ev.data);if(!d||!d.message)return;var m;try{m=JSON.parse(d.message)}catch(e){return}
+                if(!d||!d.message)return;var m;try{m=JSON.parse(d.message)}catch(e){return}
                 if(!CU)return;
                 if(m.type==='msg'&&m.toId===CU.id){
                     publishPresence();if(m.msg&&m.msg.id)applyLiveMsg(m.msg);pollOnce();
@@ -1166,9 +1172,9 @@ function startLive(){
                     if(!(ov&&parseInt(ov.dataset.partner,10)===m.fromId))toast('💬','Новое сообщение от '+(m.fromName||'?'),'info');
                 } else if(m.type==='hb'&&m.id&&m.v&&m.id!==CU.id){var hp=DB.presence||{};if(!hp[m.id]||(hp[m.id].ts||0)<(m.v.ts||0)){hp[m.id]=m.v;DB.presence=hp;setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}}else if(m.type==='refresh'){publishPresence();if(m.cols&&m.cols.length&&Date.now()-lastRefFetch>3000){lastRefFetch=Date.now();Promise.all(m.cols.map(function(ck){return (fbIsDown()?Promise.reject(new Error('down')):fbFetchCol(ck)).then(function(v){return[ck,v]}).catch(function(){return fbProxyGet(kvPath(COLS[ck])).then(function(v){return[ck,v]}).catch(function(){return[ck,undefined]})})})).then(function(rs){var partial={},ch=false;rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];ch=true}});if(ch){applyRemote(mergeDB(partial));ensurePhotos();}}).catch(function(){});}pollOnce();}
             }catch(e){}
-        };
-    }catch(e){liveSrc=null}
 }
+var lastNtfyPoll=0,ntfySeen={};
+function ntfyJsonPoll(){var now=Date.now();if(now-lastNtfyPoll<15000)return;lastNtfyPoll=now;fetchT(NTFY_URL+'/'+NTFY_TOPIC+'/json?poll=1&since=2m',{},8000).then(function(r){return r.text()}).then(function(t){var ls=t.split('\n');for(var li=0;li<ls.length;li++){var line=ls[li];if(!line.trim())continue;try{var d=JSON.parse(line);if(d.event!=='message'||ntfySeen[d.id])continue;ntfySeen[d.id]=1;handleLiveMsg(d)}catch(e){}}var ks=Object.keys(ntfySeen);if(ks.length>200){for(var ki=0;ki<ks.length-100;ki++)delete ntfySeen[ks[ki]]}}).catch(function(){})}
 function ensureCreator(){
     var cp=normPhone(CREATOR.phone),found=false;
     for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
@@ -1219,7 +1225,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v40</b></div>'
+    +'<div>Версия приложения: <b>v41</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
