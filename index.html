@@ -381,6 +381,9 @@ body.dark footer{background:linear-gradient(135deg,#0a1120,#060a16)}
 body.dark #splash{background:radial-gradient(700px 400px at 70% 20%,rgba(59,130,246,.18),transparent 60%),linear-gradient(160deg,#04070f,#0a1120)}
 body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
+
+/* v44: waybill print */
+@media print{body>*:not(#wbOv){display:none!important}#wbOv{display:flex!important;position:static!important;background:#fff!important;padding:0!important;z-index:99999}#wbOv .modal{box-shadow:none!important;margin:0!important;max-width:100%!important;width:100%!important;border-radius:0!important}}
 </style>
 </head>
 <body>
@@ -711,7 +714,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v43</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v44</p>
     </footer>
 </div>
 
@@ -1228,7 +1231,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v43</b></div>'
+    +'<div>Версия приложения: <b>v44</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1491,12 +1494,33 @@ function loadAdminOrders(){
         (o.items||[]).map(function(i){return'<div class="order-item"><span>'+i.icon+' '+i.name+' ×'+i.quantity+'</span><span>'+(i.price*i.quantity)+'₽</span></div>'}).join('')+
         '<div class="order-total"><span>Итого:</span><span>'+o.total+'₽</span></div>'+
         '<div style="margin:10px 0"><label style="font-size:12px;font-weight:600">Статус заказа:</label><select id="st_'+o.id+'" onchange="setStatus('+o.id+',this.value)" style="width:100%;padding:8px;border:2px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--text);margin-top:4px"><option value="pending" '+(o.status==='pending'?'selected':'')+'>⏳ Ожидает</option><option value="processing" '+(o.status==='processing'?'selected':'')+'>🚚 В доставке</option><option value="delivered" '+(o.status==='delivered'?'selected':'')+'>✅ Доставлен</option><option value="cancelled" '+(o.status==='cancelled'?'selected':'')+'>❌ Отменён</option></select></div>'+
-        '<div style="display:flex;gap:6px;margin-top:8px"><select id="cr_'+o.id+'" style="flex:1;padding:6px;border:2px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--text)"><option value="">— назначить курьера —</option>'+opts+'</select><button class="ua-btn" style="background:var(--success);color:#fff" onclick="assignCourier('+o.id+')">✓</button><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deleteOrder('+o.id+')">🗑</button></div></div>';
+        '<div style="display:flex;gap:6px;margin-top:8px"><select id="cr_'+o.id+'" style="flex:1;padding:6px;border:2px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--text)"><option value="">— назначить курьера —</option>'+opts+'</select><button class="ua-btn" style="background:var(--success);color:#fff" onclick="assignCourier('+o.id+')">✓</button><button class="ua-btn" style="background:#ede9fe;color:#6d28d9" title="Накладная" onclick="openWaybill('+o.id+')">🧾</button><button class="ua-btn" style="background:#fee2e2;color:var(--danger)" onclick="deleteOrder('+o.id+')">🗑</button></div></div>';
     }).join('');
 }
 function setStatus(id,s){var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===id){o=DB.orders[i];break}}if(o){o.status=s;o.statusTs=Date.now();o._ts=o.statusTs;if(s==='delivered'){pushNotif(o.userId,'✅ Доставлено','Заказ '+o.orderNumber+' доставлен. Оцените качество!','success');}if(s==='processing'){pushNotif(o.userId,'🚚 Заказ в доставке','Заказ '+o.orderNumber+' передан курьеру','info');}if(s==='cancelled'){pushNotif(o.userId,'❌ Заказ отменён','Заказ '+o.orderNumber+' отменён','warning');}cloudSave(function(){loadAdmin();loadAdminOrders();});}}
 function assignCourier(oid){var sel=document.getElementById('cr_'+oid);if(!sel)return;var cid=parseInt(sel.value,10);var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===oid){o=DB.orders[i];break}}if(!o)return;o.statusTs=Date.now();o._ts=o.statusTs;if(!cid){o.assignedCourier=null;o.courierName=null;o.courierUid=null}else{var u=findUserById(cid);if(!u)return;o.assignedCourier=cid;o.courierName=u.name;o.courierUid=u.uid;pushNotif(cid,'📦 Доставка назначена',o.orderNumber,'info');pushNotif(o.userId,'🚚 Курьер назначен','Ваш заказ повезёт '+safeName(u),'success');}cloudSave(function(){toast('🚚','Назначено','success');loadAdminOrders();updateCourierPins();})}
 function deleteOrder(id){confirm2('Удалить заказ?',function(){tomb('order',id);DB.orders=DB.orders.filter(function(o){return o.id!==id});var lo=jGet('localOrders',[]);lo=lo.filter(function(o){return o.id!==id});lsSet('localOrders',JSON.stringify(lo));cloudSave(function(){toast('','Удалено','info');loadAdmin();loadAdminOrders();});})}
+function wbAddr(o){var a=o.address||{};return safeStr(a&&a.street)+', д.'+safeStr(a&&a.house)+(a&&a.apartment?', кв.'+a.apartment:'')+(a&&a.entrance?', подъезд '+a.entrance:'')+(a&&a.floor?', эт.'+a.floor:'')+(a&&a.doorCode?', домофон '+a.doorCode:'');}
+function openWaybill(id){var o=null;for(var i=0;i<DB.orders.length;i++){if(DB.orders[i].id===id){o=DB.orders[i];break}}if(!o)return;var cr=o.assignedCourier?findUserById(o.assignedCourier):null;var crName=o.courierName||(cr?safeName(cr):'— не назначен');
+    var rows=(o.items||[]).map(function(it){return'<tr><td style="padding:4px 0">'+(it.icon||'')+' '+escHtml(it.name)+'</td><td style="text-align:center">'+it.quantity+'</td><td style="text-align:right">'+it.price+' ₽</td><td style="text-align:right">'+(it.price*it.quantity)+' ₽</td></tr>'}).join('');
+    var h='<div id="wbOv" class="modal-overlay" style="z-index:9999"><div class="modal" style="max-width:480px;background:#fff;color:#111;text-align:left">'
+    +'<div style="text-align:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px"><div style="font-size:20px;font-weight:900">КАРАВАН</div><div style="font-size:12px;color:#555">Доставка воды премиум качества · Дербент · karavanvoda.ru</div><div style="font-size:16px;font-weight:800;margin-top:6px">НАКЛАДНАЯ №'+escHtml(String(o.orderNumber||o.id))+'</div><div style="font-size:12px;color:#555">'+escHtml(o.date||'')+'</div></div>'
+    +'<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:10px">'
+    +'<tr><td style="padding:3px 0;color:#555;width:120px">Заказчик:</td><td><strong>'+escHtml(safeName(o))+'</strong></td></tr>'
+    +'<tr><td style="padding:3px 0;color:#555">Телефон:</td><td>'+escHtml(o.userPhone||'')+'</td></tr>'
+    +'<tr><td style="padding:3px 0;color:#555">Адрес:</td><td>'+escHtml(wbAddr(o))+'</td></tr>'
+    +'<tr><td style="padding:3px 0;color:#555">Время доставки:</td><td>'+escHtml(o.deliveryTime||'—')+'</td></tr>'
+    +'<tr><td style="padding:3px 0;color:#555">Оплата:</td><td>'+(o.paymentMethod==='card'?'Карта':'Наличные')+'</td></tr>'
+    +'<tr><td style="padding:3px 0;color:#555">Курьер:</td><td>'+escHtml(crName)+'</td></tr></table>'
+    +'<table style="width:100%;font-size:13px;border-collapse:collapse;border-top:2px solid #111">'
+    +'<tr style="border-bottom:1px solid #999"><th style="text-align:left;padding:5px 0">Товар</th><th>Кол-во</th><th style="text-align:right">Цена</th><th style="text-align:right">Сумма</th></tr>'+rows
+    +'<tr style="border-top:2px solid #111"><td colspan="2" style="padding:8px 0;font-weight:800">ИТОГО:</td><td></td><td style="text-align:right;font-weight:800">'+(o.total||0)+' ₽</td></tr></table>'
+    +(o.comment?'<div style="font-size:12px;margin-top:8px;color:#555">💬 Пожелания: '+escHtml(o.comment)+'</div>':'')
+    +'<div style="display:flex;justify-content:space-between;margin-top:26px;font-size:12px"><div>Курьер: ____________</div><div>Заказчик: ____________</div></div>'
+    +'<div style="display:flex;gap:8px;margin-top:16px"><button class="ua-btn" style="flex:1;background:#1e40af;color:#fff" onclick="wbPrint()">🖨 Печать / PDF</button><button class="ua-btn" style="background:#e2e8f0;color:#111" onclick="closeWb()">Закрыть</button></div></div></div>';
+    closeWb();document.body.insertAdjacentHTML('beforeend',h);toast('🧾','Накладная готова','success');}
+function closeWb(){var w=document.getElementById('wbOv');if(w)w.remove();}
+function wbPrint(){window.print();}
 function updateCourierPins(){var pins=document.getElementById('courierPins');if(!pins)return;var act=DB.orders.filter(function(o){return o.assignedCourier&&o.status==='processing'});pins.innerHTML=act.length?act.map(function(o){return'<div style="display:inline-block;background:#fff;padding:8px 12px;border-radius:20px;margin:4px;color:#1e40af;font-size:12px">📍 '+escHtml(o.courierName||'?')+' → '+escHtml(safeStr(o.address&&o.address.street))+'</div>'}).join(''):'<p style="color:#1e40af">Нет активных доставок</p>';}
 
 
