@@ -711,7 +711,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v36</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v37</p>
     </footer>
 </div>
 
@@ -1215,7 +1215,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v36</b></div>'
+    +'<div>Версия приложения: <b>v37</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
@@ -1241,7 +1241,7 @@ function publishPresence(){
     if(!CU)return;
     var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
     DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
-    if(FB_DB&&!fbIsDown())fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbMarkDown();if(relayOk)relaySend(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),'PUT',JSON.stringify(v)).catch(function(){});fbReauth()});
+    if(FB_DB&&!fbIsDown())fetchT(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)},8000).catch(function(){fbMarkDown();if(relayOk)relaySend(KV+'/hb/'+CU.id+'.json'+fbWriteSuffix(),'PUT',JSON.stringify(v)).catch(function(){});fbReauth();mirrorPush(JSON.stringify(DB),false)});else mirrorPush(JSON.stringify(DB),false);
 }
 function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||!CU)return;var pid=parseInt(ov.dataset.partner,10);if(!pid)return;var cid=getChatId(CU.id,pid);var msgs=(DB.chats||{})[cid]||[];var mb=document.getElementById('chatMsgs');if(!mb)return;msgs.forEach(function(m){if(m.toId===CU.id&&!m.read){m.read=true;CHAT_READ[m.id]=1}});chatReadSave();var sig=msgs.length+':'+msgs.map(function(m){return m.id+(m.read?'r':'u')+(m.media?'m':'')}).join('|');if(sig===ov._chatSig)return;var firstTime=!ov._chatSig;ov._chatSig=sig;var atBottom=firstTime||mb.scrollHeight-mb.scrollTop-mb.clientHeight<80;mb.innerHTML=renderMsgs(msgs);if(atBottom)mb.scrollTop=mb.scrollHeight;}
 
