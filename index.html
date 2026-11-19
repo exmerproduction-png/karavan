@@ -714,6 +714,1311 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v49</p>
+    </footer>
+</div>
+
+
+<script>
+'use strict';
+/* =====================================================================
+   ОБЛАЧНАЯ БАЗА (textdb.dev) — БЕЗ РЕГИСТРАЦИИ И КЛЮЧЕЙ
+   Вся база DB хранится одним JSON-документом по адресу DB_URL ниже.
+   ===================================================================== */
+var DB_URL = 'https://textdb.dev/api/data/karavan-voda-db-7f3a9c2e';
+var REG_URL = 'https://textdb.dev/api/data/karavan-blob-reg-51bb6b';
+var BLOB_API = 'https://jsonblob.com/api/jsonBlob';
+var NTFY_URL = 'https://ntfy.sh';
+var NTFY_TOPIC = 'karavan-voda-51bb6b-live';
+var blobId = jGet('blobId', null);
+var FB_DB = 'https://karavanvoda-default-rtdb.firebaseio.com';
+var FB_KEY = 'AIzaSyADH-y1RNjoQ_XYCgQxG8-_97oxZqS341w';
+var FB_SECRET = 'tjJmD55bCxynpwz4jshqk7g3eKHvX6kVTTb9DSH5';
+var fbTok = jGet('fbTok', null), fbRef = jGet('fbRef', null), fbTokExp = 0;var fbETag=jGet('fbETag',null);
+
+
+var DB = {users:[],orders:[],announcements:[],promos:{},discounts:{},chats:{},bonuses:{},pinned:{},muted:{},bonusRequests:[],complaints:[],reviews:[],presence:{},_notifs:{},customProducts:[],statsOffset:{},statsOffsetTs:{},discTs:{},_deleted:{},_notifsCleared:{}};
+var cloudReady=false, saving=false, lastSaved=0, saveQueue=[];
+var CU=null, cart=[], selIdx=0, appliedPromo=null, selectedPayment='card', myGeo=null, myIP=null;
+var PHOTO_CACHE=(function(){var c=null;try{c=JSON.parse(localStorage.getItem('photoCache')||'{}')||{}}catch(e){c={}}if(typeof c!=='object'||Array.isArray(c))c={};Object.keys(c).forEach(function(k){var e=c[k];if(!e||!e.d||String(e.d).indexOf('data:image')!==0)delete c[k]});return c})();
+var NOTIF_STATE=(function(){var c=null;try{c=JSON.parse(localStorage.getItem('notifState')||'{}')||{}}catch(e){c={}}if(typeof c!=='object'||Array.isArray(c))c={};if(!c.cleared||typeof c.cleared!=='object')c.cleared={};if(!c.read||typeof c.read!=='object')c.read={};return c})();
+var CHAT_READ=(function(){try{var c=JSON.parse(localStorage.getItem('chatRead')||'{}')||{};if(typeof c!=='object'||Array.isArray(c))c={};return c}catch(e){return{}}})();
+function chatReadSave(){var k=Object.keys(CHAT_READ);if(k.length>4000){k.sort();for(var i=0;i<k.length-3000;i++)delete CHAT_READ[k[i]]}try{localStorage.setItem('chatRead',JSON.stringify(CHAT_READ))}catch(e){}}
+function notifStateSave(){try{lsSet('notifState',JSON.stringify(NOTIF_STATE))}catch(e){}}
+
+
+/* ЗАДАЧА 2: товары с фото (ссылки на реальные изображения) */
+var PRODUCTS=[
+    {id:'bottle_first',name:'Бутыль 19л (первая)',price:600,isBottle:true,img:'https://static.tildacdn.com/tild3135-6162-4634-a330-656539393762/001.png',desc:'Первая бутыль 19 литров чистой воды'},
+    {id:'bottle_repeat',name:'Замена бутыли 19л',price:150,isBottle:true,img:'https://static.tildacdn.com/tild3135-6162-4634-a330-656539393762/001.png',desc:'Замена пустой бутыли на полную'},
+    {id:'pump_mech',name:'Помпа механическая',price:400,isBottle:false,img:'https://static.tildacdn.com/tild6632-3538-4031-a664-353438393363/002.png',desc:'Механическая помпа для бутыли'},
+    {id:'pump_elec',name:'Помпа электронная',price:500,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Электронная помпа с кнопкой'},
+    {id:'pump_vip',name:'Помпа VIP',price:600,isBottle:false,img:'https://static.tildacdn.com/tild3265-3030-4461-a338-633030353461/004.png',desc:'Премиальная помпа VIP'}
+];
+function allProducts(){return PRODUCTS.concat(DB.customProducts||[])}
+function prodById(id){var a=allProducts();for(var i=0;i<a.length;i++){if(a[i].id===id)return a[i]}return a[0]}
+
+
+var CREATOR = {phone:'+79634296614', name:'Эльдар', email:'exmerproduction@gmail.com', birthDate:'24.08.2006', role:'creator'};
+function isCreator(u){return u && normPhone(u.phone)===normPhone(CREATOR.phone)}
+function roleOf(u){if(isCreator(u))return (u&&u.selfRole)||'creator'; return (u&&u.role)||'client'}
+function roleName(r){return{client:'Клиент',worker:'Курьер',admin:'Администратор',creator:'Создатель'}[r]||r}
+function roleIcon(r){return{client:'🛃',worker:'🚚',admin:'⭐',creator:'👑'}[r]||'🛃'}
+function isAdmin(u){if(!u)return false;if(isCreator(u))return true;return roleOf(u)==='admin'}
+function roleChip(u){var r=roleOf(u);var cls={creator:'rc-creator',admin:'rc-admin',worker:'rc-worker',client:'rc-client'}[r]||'rc-client';return '<span class="role-chip '+cls+'">'+roleName(r)+'</span>'}
+var TICK1='<svg viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var TICK2='<svg viewBox="0 0 20 16" fill="none"><path d="M1 8.5L5 12.5L13 4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12.5L17 3.5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+
+/* ================= ОБЛАКО ================= */
+var syncHideT=null;function showSync(on){var b=document.getElementById('syncBadge');if(!b)return;if(on){b.classList.add('show');if(syncHideT)clearTimeout(syncHideT);syncHideT=setTimeout(function(){b.classList.remove('show')},8000);}else{if(syncHideT){clearTimeout(syncHideT);syncHideT=null;}b.classList.remove('show')}}
+function setOnlinePill(){var t=document.getElementById('onlineText');if(!t)return;var cnt=countOnline();t.textContent='Онлайн 🟢 '+cnt+' '+(cnt===1?'человек':(cnt>=2&&cnt<=4?'человека':'людей'))+(CU?'':' · войдите');}
+function countOnline(){var now=Date.now(),c=0,p=DB.presence||{};for(var k in p){if(p[k]&&now-p[k].ts<300000)c++;}if(CU&&!(p[CU.id]&&now-p[CU.id].ts<300000))c++;return c;}
+function mergeDB(r){return{users:Array.isArray(r.users)?r.users:[],orders:Array.isArray(r.orders)?r.orders:[],announcements:Array.isArray(r.announcements)?r.announcements:[],promos:r.promos&&typeof r.promos==='object'?r.promos:{},discounts:r.discounts&&typeof r.discounts==='object'?r.discounts:{},chats:r.chats&&typeof r.chats==='object'?r.chats:{},bonuses:r.bonuses&&typeof r.bonuses==='object'?r.bonuses:{},pinned:r.pinned&&typeof r.pinned==='object'?r.pinned:{},muted:r.muted&&typeof r.muted==='object'?r.muted:{},bonusRequests:Array.isArray(r.bonusRequests)?r.bonusRequests:[],complaints:Array.isArray(r.complaints)?r.complaints:[],reviews:Array.isArray(r.reviews)?r.reviews:[],presence:r.presence&&typeof r.presence==='object'?r.presence:{},_notifs:r._notifs&&typeof r._notifs==='object'?r._notifs:{},customProducts:Array.isArray(r.customProducts)?r.customProducts:[],statsOffset:r.statsOffset&&typeof r.statsOffset==='object'?r.statsOffset:{},statsOffsetTs:r.statsOffsetTs&&typeof r.statsOffsetTs==='object'?r.statsOffsetTs:{},discTs:r.discTs&&typeof r.discTs==='object'?r.discTs:{},bonusTs:r.bonusTs&&typeof r.bonusTs==='object'?r.bonusTs:{},_deleted:r._deleted&&typeof r._deleted==='object'?r._deleted:{},_notifsCleared:r._notifsCleared&&typeof r._notifsCleared==='object'?r._notifsCleared:{}}}
+function tomb(type,id){if(!DB._deleted)DB._deleted={};DB._deleted[type+':'+id]=Date.now()}
+function untomb(type,id){if(DB._deleted)delete DB._deleted[type+':'+id]}
+function fetchT(url,opt,tmo){opt=opt||{};tmo=tmo||8000;var c=new AbortController();var t=setTimeout(function(){try{c.abort()}catch(e){}},tmo);opt.signal=c.signal;return fetch(url,opt).then(function(r){clearTimeout(t);return r},function(e){clearTimeout(t);throw e})}
+function syncMerge(local,remote){
+    var out=mergeDB(remote);
+    out._deleted=out._deleted||{};var ll=local._deleted||{};
+    for(var dk in ll){if(out._deleted[dk]===undefined||ll[dk]>out._deleted[dk])out._deleted[dk]=ll[dk]}
+    var dl=out._deleted;var cutoff0=Date.now()-14*864e5;for(var dk0 in dl){if(dl[dk0]<cutoff0)delete dl[dk0]}
+    function unionById(arr,locArr,type){var ids={};arr.forEach(function(x){if(x&&x.id!==undefined)ids[x.id]=1});(locArr||[]).forEach(function(x){if(x&&x.id!==undefined&&!ids[x.id]){arr.push(x);ids[x.id]=1}});if(type){var f=arr.filter(function(x){return !(x&&x.id!==undefined&&dl[type+':'+x.id]!==undefined)});if(f.length!==arr.length){arr.length=0;Array.prototype.push.apply(arr,f)}}}
+    unionById(out.users,local.users,'user');(function(){var lu={};(local.users||[]).forEach(function(u){if(u&&u.id!==undefined)lu[u.id]=u});out.users=out.users.map(function(ru){var l=ru?lu[ru.id]:null;if(l&&((l._ts||0)>((ru._ts||0))))return l;return ru});out.users.forEach(function(ru){var l=ru?lu[ru.id]:null;if(!l)return;['photo','name','gender','birthDate','email','password','uid'].forEach(function(k2){var lv=l[k2];if(lv!==undefined&&lv!==null&&lv!==''&&(ru[k2]===undefined||ru[k2]===null||ru[k2]===''))ru[k2]=lv})});})();unionById(out.orders,local.orders,'order');(function(){var lm={};(local.orders||[]).forEach(function(x){if(x&&x.id!==undefined)lm[x.id]=x});for(var i2=0;i2<out.orders.length;i2++){var r2=out.orders[i2],l2=r2?lm[r2.id]:null;if(l2&&((l2.statusTs||l2._ts||0)>((r2.statusTs||r2._ts||0))))out.orders[i2]=l2}})();(function(){var lm={};(local.bonusRequests||[]).forEach(function(x){if(x&&x.id!==undefined)lm[x.id]=x});for(var i3=0;i3<out.bonusRequests.length;i3++){var r3=out.bonusRequests[i3],l3=r3?lm[r3.id]:null;if(l3&&((l3.statusTs||l3._ts||0)>((r3.statusTs||r3._ts||0))))out.bonusRequests[i3]=l3}})();unionById(out.announcements,local.announcements,'ann');unionById(out.bonusRequests,local.bonusRequests,'breq');unionById(out.complaints,local.complaints,'comp');unionById(out.reviews,local.reviews,'rev');unionById(out.customProducts,local.customProducts,'prod');
+    var lm=local.chats||{};for(var cid in lm){if(!Array.isArray(lm[cid]))continue;var rm=Array.isArray(out.chats[cid])?out.chats[cid]:[];var seen={},all=lm[cid].filter(function(m){if(!m||!m.id)return false;seen[m.id]=1;return true});rm.forEach(function(m){if(!m||!m.id)return;var ex=null;for(var i4=0;i4<all.length;i4++){if(all[i4]&&all[i4].id===m.id){ex=all[i4];break}}if(!ex){if(CHAT_READ[m.id])m.read=true;all.push(m);seen[m.id]=1}else{if(!ex.read&&m.read)ex.read=true;if(CHAT_READ[m.id])ex.read=true}});all.sort(function(a,b){return new Date(a.time)-new Date(b.time)});out.chats[cid]=all;}
+    for(var uid in (local.presence||{})){var lp=local.presence[uid],rp=out.presence[uid];if(lp&&(!rp||(lp.ts||0)>=(rp.ts||0)))out.presence[uid]=lp;}
+    ['promos','bonuses','muted'].forEach(function(key){var lo=local[key]||{};for(var kk in lo){var lv=lo[kk],rv=out[key][kk];if(rv===undefined)out[key][kk]=lv;else{var lt=(lv&&lv._ts)||0,rt=(rv&&rv._ts)||0;if(lt>rt)out[key][kk]=lv}}});
+    (function(){if(!out.discTs)out.discTs={};var lo=local.discounts||{},tsL=local.discTs||{},tsR=out.discTs||{};for(var kk in lo){var rv=out.discounts[kk];if(rv===undefined){out.discounts[kk]=lo[kk];out.discTs[kk]=tsL[kk]||Date.now()}else if((tsL[kk]||0)>(tsR[kk]||0)){out.discounts[kk]=lo[kk];out.discTs[kk]=tsL[kk]||0}}})();
+    var loP=local.pinned||{};for(var pk in loP){var lt2=((loP[pk]===true?0:loP[pk])||0),rv2=out.pinned[pk],rt2=((rv2===true?0:rv2)||0);if(rv2===undefined||lt2>rt2)out.pinned[pk]=loP[pk]}
+    var tp={promo:'promos',pin:'pinned',muted:'muted'};Object.keys(tp).forEach(function(t){var targ=out[tp[t]];Object.keys(dl).forEach(function(k){if(k.indexOf(t+':')===0){var kk=k.substring(t.length+1);var v=targ[kk];if(v===undefined)return;var vts=(t==='pin')?(((v===true?0:v))||0):((t==='disc')?((out.discTs&&out.discTs[kk])||0):((v&&v._ts)||0));if((dl[k]||0)>vts)delete targ[kk]}})});
+    var soL=local.statsOffset||{},soR=out.statsOffset||{},tsL=local.statsOffsetTs||{},tsR=out.statsOffsetTs||{};var so={},tsT={};Object.keys(soR).concat(Object.keys(soL)).forEach(function(k){var tl=tsL[k]||0,tr=tsR[k]||0;var winL=tl>=tr;var v=winL?(soL[k]!==undefined?soL[k]:soR[k]):(soR[k]!==undefined?soR[k]:soL[k]);if(v!==undefined){so[k]=v;tsT[k]=Math.max(tl,tr)}});out.statsOffset=so;out.statsOffsetTs=tsT;var dtL=local.discTs||{},dtR=out.discTs||{};var dt={};Object.keys(dtR).concat(Object.keys(dtL)).forEach(function(k){dt[k]=Math.max(dtR[k]||0,dtL[k]||0)});out.discTs=dt;(function(){if(!out.bonusTs)out.bonusTs={};var lo=local.bonuses||{},tsL=local.bonusTs||{},tsR=out.bonusTs||{};for(var kk in lo){var rv=out.bonuses[kk];if(rv===undefined){out.bonuses[kk]=lo[kk];if(tsL[kk])out.bonusTs[kk]=tsL[kk]}else if((tsL[kk]||0)>(tsR[kk]||0)){out.bonuses[kk]=lo[kk];out.bonusTs[kk]=tsL[kk]||0}}var btL=local.bonusTs||{},btR=out.bonusTs||{};for(var bk in btL){if(btR[bk]===undefined||btL[bk]>btR[bk])btR[bk]=btL[bk]}out.bonusTs=btR;})();
+    var ln=local._notifs||{};for(var u2 in ln){var la=Array.isArray(ln[u2])?ln[u2]:[],ra=Array.isArray(out._notifs[u2])?out._notifs[u2]:[];var seen2={},all2=[];ra.concat(la).forEach(function(n2){if(!n2||!n2.id)return;var ex=seen2[n2.id]!==undefined?all2[seen2[n2.id]]:null;if(ex){if(!ex.read&&n2.read)ex.read=true;return}seen2[n2.id]=all2.length;all2.push(n2)});all2.sort(function(a,b){return new Date(b.time)-new Date(a.time)});out._notifs[u2]=all2.slice(0,40);}
+    var ncL=local._notifsCleared||{},ncR=out._notifsCleared||{};for(var nk in ncL){if(ncR[nk]===undefined||ncL[nk]>ncR[nk])ncR[nk]=ncL[nk]}out._notifsCleared=ncR;
+    return out;
+}
+function fetchRegistry(cb){fetchT(REG_URL+'?t='+Date.now(),{},5000).then(function(r){return r.text()}).then(function(t){var id=(t||'').trim();if(id&&id.length>8){blobId=id;lsSet('blobId',id);if(cb)cb(true)}else if(cb)cb(false)}).catch(function(){if(cb)cb(false)})}
+function ensureBlob(cb){
+    fetchT(BLOB_API,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(DB)},10000).then(function(r){
+        var loc=r.headers.get('Location')||r.headers.get('location');
+        if(r.ok&&loc){blobId=loc.split('/').pop();lsSet('blobId',blobId);fetchT(REG_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:blobId}).catch(function(){});if(cb)cb(true)}else if(cb)cb(false);
+    }).catch(function(){if(cb)cb(false)});
+}
+function fbUrl(){return FB_DB.replace(/\/$/,'')}
+function fbAuthSuffix(){return fbTok?'&auth='+encodeURIComponent(fbTok):(FB_SECRET?'&auth='+encodeURIComponent(FB_SECRET):'')}
+function fbWriteSuffix(){return fbTok?'?auth='+encodeURIComponent(fbTok):(FB_SECRET?'?auth='+encodeURIComponent(FB_SECRET):'')}
+function fbSaveTok(j){fbTok=j.idToken||j.id_token;fbRef=j.refreshToken||j.refresh_token;fbTokExp=Date.now()+((parseInt(j.expiresIn||j.expires_in,10)||3600)-5)*1000;lsSet('fbTok',JSON.stringify(fbTok));lsSet('fbRef',JSON.stringify(fbRef));return fbTok}
+function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},5000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error((j.error&&j.error.message)||'auth');return fbSaveTok(j)})}
+function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},6000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)}).catch(function(){if(!fbRef)throw new Error('noref');return fbRefreshProxy()})}
+function fbSignupProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},8000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error('pxauth');return fbSaveTok(j)})}
+function fbRefreshProxy(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent('https://securetoken.googleapis.com/v1/token?key='+FB_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},8000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('pxrefresh');return fbSaveTok(j)})}
+function fbSecretProbe(){if(!FB_SECRET)return Promise.reject(new Error('nosecret'));var pp=fbUrl()+'/kv/mt.json?t='+Date.now()+'&auth='+encodeURIComponent(FB_SECRET);return fetchT(pp,{},5000).then(function(r){if(r.status>=400)throw new Error('probe '+r.status);fbSetTokMode('secret');return FB_SECRET})}
+function fbAuthInit(){if(!FB_KEY)return Promise.resolve(null);if(fbTok&&fbTokExp>Date.now()+120000){if(FB_SECRET&&fbTokMode!=='secret')fbSecretProbe().catch(function(){});return Promise.resolve(fbTok)}if(fbTokMode==='secret'&&FB_SECRET){fbTryGoogleAuth();return Promise.resolve(FB_SECRET)}var slow=(fbTok&&fbRef)?fbRefreshTok().catch(function(){return fbRefreshProxy()}).catch(function(){return fbSignup()}).catch(function(){return fbSignupProxy()}):fbSignup().catch(function(){return fbSignupProxy()});if(FB_SECRET){return Promise.race([slow.then(function(t){return t||null},function(){return null}),fbSecretProbe().then(function(t){return t||null},function(){return null})]).then(function(t){if(t)return t;fbSetTokMode('secret');return FB_SECRET})}return slow.catch(function(e){throw e})}
+/* ================= v22: по-коллекционное хранилище Firebase ================= */
+var KV=(FB_DB?fbUrl():'')+'/kv';
+var COLS={users:'users',orders:'orders',announcements:'ann',bonusRequests:'breq',complaints:'comp',reviews:'rev',customProducts:'prods',promos:'promos',discounts:'disc',discTs:'discTs',bonusTs:'bonusTs',bonuses:'bon',pinned:'pin',muted:'muted',statsOffset:'so',statsOffsetTs:'soTs',_deleted:'tomb',_notifsCleared:'nclear'};
+var SHADOW={},seenMt=jGet('mtSeen',{}),knownIdx=jGet('chatSeen',{}),ETAGS=jGet('fbETags',{}),MEDIA_CACHE={},photoLoading={},mediaLoading={},mirrorLast=0;
+function seenMtSave(){lsSet('mtSeen',JSON.stringify(seenMt))}
+function chatSeenSave(){lsSet('chatSeen',JSON.stringify(knownIdx))}
+function kvPath(k){return KV+'/'+k+'.json'}
+function shadowDiff(k){return safeStr(DB[k])!==(SHADOW[k]||null)}
+function lastMsgTs(msgs){if(!msgs||!msgs.length)return 0;var mx=0;msgs.forEach(function(m){var t=new Date(m.time).getTime();if(t>mx)mx=t});return mx}
+function fbGetNode(path,useEtag,retry){
+    var h={};if(useEtag&&fbTokMode!=='secret'&&ETAGS[path])h['If-None-Match']=ETAGS[path];
+    return fetchT(path+'?t='+Date.now()+fbAuthSuffix(),{headers:h},10000).then(function(r){
+        if(r.status<400)fbMarkUp();else fbMarkDown();
+        var et=r.headers.get('ETag');if(et){ETAGS[path]=et;lsSet('fbETags',JSON.stringify(ETAGS))}
+        if(r.status===304)return{nc:true};
+        if((r.status===401||r.status===403)&&!retry){return fbReauth().then(function(ok){if(ok)return fbGetNode(path,useEtag,true);return{v:null,status:r.status}})}
+        if(r.status>=400)return{v:null,status:r.status};
+        return r.text().then(function(txt){var v=null;if(txt&&txt.trim()&&txt.trim()!=='null'&&txt.trim()!=='""'){try{v=JSON.parse(txt)}catch(e){}}return{v:v,status:r.status}});
+    }).catch(function(e){fbMarkDown();
+        if(!relayOk)return Promise.reject(e);
+        return relaySend(path+fbAuthSuffix(),'GET','').then(function(rr){return rr.text()}).then(function(txt){var v=null;if(txt&&txt.trim()&&txt.trim()!=='null'&&txt.trim()!=='""'){try{v=JSON.parse(txt)}catch(e2){}}return{v:v,status:200}}).catch(function(){throw e});
+    });
+}
+function fbFetchCol(k){return fbGetNode(kvPath(COLS[k]),false).then(function(r){if(r.status>=400)throw new Error('http'+r.status);SHADOW[COLS[k]]=r.v===null?null:JSON.stringify(r.v);return r.v})}
+function photoCacheSave(){try{var ks=Object.keys(PHOTO_CACHE);if(ks.length>40){ks.sort(function(a,b){return(PHOTO_CACHE[a]._t||0)-(PHOTO_CACHE[b]._t||0)});ks.slice(0,ks.length-40).forEach(function(k){delete PHOTO_CACHE[k]})}}catch(e){}lsSet('photoCache',JSON.stringify(PHOTO_CACHE))}
+function ensurePhotos(){
+    if(!FB_DB||!DB.users)return;var need=[];
+    DB.users.forEach(function(u){if(u&&u.hasPhoto&&!PHOTO_CACHE[u.uid]&&!photoLoading[u.uid])need.push(u.uid)});
+    need.slice(0,10).forEach(function(uid){photoLoading[uid]=1;
+        fetchT(KV+'/photos/'+uid+'.json?t='+Date.now()+fbAuthSuffix(),{},12000).then(function(r){return r.text()}).then(function(t){var d=null;try{d=JSON.parse(t)}catch(e){}
+            if(!d)throw new Error('no photo');return d}).then(function(d){PHOTO_CACHE[uid]={d:d,_t:Date.now()};photoCacheSave();renderPeople();updateOpenChat();updateProfileContent();if(CU&&isAdmin(CU))loadAdminUsers();}).catch(function(){
+            return fbProxyGet(KV+'/photos/'+uid+'.json').then(function(d){if(d){PHOTO_CACHE[uid]={d:d,_t:Date.now()};photoCacheSave();renderPeople();updateOpenChat();updateProfileContent();if(CU&&isAdmin(CU))loadAdminUsers();}}).catch(function(){})}).then(function(){delete photoLoading[uid]})});
+}
+function fetchMedia(mid){
+    if(!mid||MEDIA_CACHE[mid]||mediaLoading[mid]||!FB_DB)return;mediaLoading[mid]=1;
+    var mp=KV+'/media/'+mid+'.json';
+    function done(v){if(v){MEDIA_CACHE[mid]=v;updateOpenChat()}}
+    fetchT(mp+'?t='+Date.now()+fbAuthSuffix(),{},12000).then(function(r){return r.text()}).then(function(t){var v=null;try{v=JSON.parse(t)}catch(e){}
+        if(!v)throw new Error('no media');return v}).then(done).catch(function(){
+        var viaRelay=relayOk?relaySend(mp+fbAuthSuffix(),'GET','').then(function(r){return r.text()}).then(function(t){var v=null;try{v=JSON.parse(t)}catch(e){}if(!v)throw new Error('no media');return v}):Promise.reject(new Error('no relay'));
+        return viaRelay.then(done).catch(function(){return fbProxyGet(mp).then(function(v){if(v)done(v)})});
+    }).then(function(){delete mediaLoading[mid]});
+}
+function loadMediaMsg(mid){if(!mid)return;if(MEDIA_CACHE[mid]){updateOpenChat();return}toast('','Загружаю фото…','info');fetchMedia(mid);}
+function mirrorPush(payload,force){
+    var now=Date.now();if(!force&&now-mirrorLast<15000)return Promise.resolve(false);mirrorLast=now;
+    function mergeTxt(txt){var m=payload;if(txt&&txt.trim()){try{m=JSON.stringify(syncMerge(JSON.parse(payload),JSON.parse(txt)))}catch(e){}}return m}
+    var p=fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:mergeTxt(txt)},10000).then(function(){return true});
+    }).catch(function(){return fetchT(DB_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:payload},10000).then(function(){return true}).catch(function(){return false})});
+    (function(){
+        function bw(body){if(blobId)fetchT(BLOB_API+'/'+blobId,{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000).catch(function(){})}
+        if(!blobId){ensureBlob(function(ok){if(ok)bw(payload)});return}
+        fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){bw(mergeTxt(txt))}).catch(function(){bw(payload)});
+    })();
+    return p;
+}
+function hbFetch(){
+    if(!FB_DB)return;
+    var ownE=CU?DB.presence[CU.id]:null;
+    fbGetNode(KV+'/hb',true).then(function(r){
+        if(r.nc)return;var h=r.v||{},now=Date.now(),p={};
+        Object.keys(h).forEach(function(k){var e=h[k];if(e&&e.ts&&now-e.ts<300000)p[k]=e});
+        if(ownE&&(!p[CU.id]||(p[CU.id].ts||0)<(ownE.ts||0)))p[CU.id]=ownE;
+        DB.presence=p;setOnlinePill();
+        if(document.getElementById('peopleContent'))renderPeople();
+        if(document.getElementById('chatsContent'))renderChats();
+    }).catch(function(){});
+}
+function fbMigrate(){
+    if(!FB_DB)return Promise.resolve();
+    return fbGetNode(KV+'/users',false).then(function(r){
+        if(r.v&&Array.isArray(r.v)&&r.v.length)return;
+        return fetchT(fbUrl()+'/db.json?t='+Date.now()+fbAuthSuffix(),{},15000).then(function(rr){return rr.text()}).then(function(txt){
+            if(!txt||!txt.trim()||txt.trim()==='null')return;
+            var old=null;try{old=JSON.parse(txt)}catch(e){return}
+            var d=mergeDB(old);if(!d.users||!d.users.length)return;
+            var nowTs=Date.now(),ups=[];
+            function put(pth,body){return fetchT(pth+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:typeof body==='string'?body:JSON.stringify(body)},15000).catch(function(){})}
+            d.users.forEach(function(u){if(u&&u.photo){ups.push(put(KV+'/photos/'+u.uid+'.json',JSON.stringify(u.photo)));u.hasPhoto=1;delete u.photo}});
+            Object.keys(COLS).forEach(function(k){var v=d[k];if(v===undefined)return;if(Array.isArray(v)&&!v.length)return;if(!Array.isArray(v)&&(!v||!Object.keys(v).length))return;
+                ups.push(put(kvPath(COLS[k]),v).then(function(){return put(KV+'/mt/'+COLS[k]+'.json',nowTs)}))});
+            Object.keys(d.chats||{}).forEach(function(cid){var msgs=d.chats[cid]||[];if(!msgs.length)return;
+                msgs.forEach(function(m){if(m&&(m.img||m.video)&&!m.media){var mid='m'+(m.id||nowTs+Math.floor(Math.random()*9999));var mm={};if(m.img)mm.img=m.img;if(m.video)mm.video=m.video;ups.push(put(KV+'/media/'+mid+'.json',mm));m.media=mid;delete m.img;delete m.video}});
+                ups.push(put(KV+'/chats/'+cid+'.json',msgs));var lts=lastMsgTs(msgs)||nowTs;
+                var pr=cid.split('_');ups.push(put(KV+'/dlg/'+pr[0]+'/'+cid+'.json',lts));ups.push(put(KV+'/dlg/'+pr[1]+'/'+cid+'.json',lts));});
+            Object.keys(d._notifs||{}).forEach(function(uid){var arr=d._notifs[uid]||[];if(arr.length)ups.push(put(KV+'/notifs/'+uid+'.json',arr))});
+            Object.keys(d.presence||{}).forEach(function(pid){var e=d.presence[pid];if(e&&e.ts&&nowTs-e.ts<600000)ups.push(put(KV+'/hb/'+pid+'.json',e))});
+            return Promise.all(ups);
+        });
+    }).catch(function(){});
+}
+
+var fbReauthBusy=null,fbLastReauth=0;
+function fbReauth(){
+    if(!FB_KEY)return Promise.resolve(false);
+    if(Date.now()-fbLastReauth<60000)return fbReauthBusy||Promise.resolve(false);
+    fbLastReauth=Date.now();
+    fbTok=null;fbRef=null;fbTokExp=0;lsDel('fbTok');lsDel('fbRef');
+    fbReauthBusy=fbSignup().catch(function(){return fbSignupProxy()}).then(function(){fbReauthBusy=null;return true}).catch(function(){fbReauthBusy=null;if(FB_SECRET){fbSetTokMode('secret');return true}return false});
+    return fbReauthBusy;
+}
+var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0,hbLastOk=0,hbFailN=0;
+var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
+function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
+function fbTryGoogleAuth(){if(!FB_KEY)return Promise.resolve(null);var p=fbSignup().catch(function(){return fbSignupProxy()}).then(function(tok){if(tok){fbSetTokMode('');return tok}throw new Error('noauth')});p.catch(function(){});return p}
+function fbDownWindow(){return [60000,120000,300000,600000][Math.min(fbFailStreak||0,3)]||60000}
+function fbIsDown(){return !!(fbDirectFail&&Date.now()-fbDirectFail<fbDownWindow())}
+function fbMarkUp(){if(fbDirectFail||fbFailStreak){fbDirectFail=0;fbFailStreak=0;lsDel('fbDirectFail');lsDel('fbFailStreak');}}
+function fbMarkDown(){var t=Date.now();if(t-fbDirectFail>5000){fbDirectFail=t;fbFailStreak=(fbFailStreak||0)+1;lsSet('fbDirectFail',String(t));lsSet('fbFailStreak',String(fbFailStreak));}}
+var RELAY=(location.protocol==='http:'||location.protocol==='https:'?location.origin:'')+'/relay.php';
+var relayOk=false,relayChecked=0;
+function relayProbe(){
+    if(!FB_DB)return;fetchT(RELAY+'?ping=1&t='+Date.now(),{},8000).then(function(r){return r.json()}).then(function(j){relayOk=!!(j&&j.ok);relayChecked=Date.now();}).catch(function(){relayOk=false;relayChecked=Date.now();});
+}
+var relayChain=Promise.resolve(),relayLastCall=0;
+function relayLimit(fn){var go=relayChain.then(function(){var w=Math.max(0,1200-(Date.now()-relayLastCall));return new Promise(function(res){setTimeout(res,w)})}).then(fn).then(function(r){relayLastCall=Date.now();return r},function(e){relayLastCall=Date.now();throw e});relayChain=go.catch(function(){});return go}
+function relaySend(fbu,method,body,to){
+    return relayLimit(function(){return fetchT(RELAY+'?m='+method+'&u='+encodeURIComponent(fbu),{method:'POST',headers:{'Content-Type':'application/json'},body:body||''},to||12000).then(function(r){if(r.status>=400)throw new Error('relay '+r.status);return r})});
+}
+function fbProxyGet(path){var at=fbTok||FB_SECRET;if(!at)return Promise.resolve(null);var enc=encodeURIComponent(path+(path.indexOf('?')>=0?'&':'?')+'auth='+encodeURIComponent(at));
+    var urls=(relayOk?[RELAY+'?u='+enc]:[]).concat(['https://api.allorigins.win/raw?url='+enc,'https://corsproxy.io/?url='+enc,'https://api.codetabs.com/v1/proxy?quest='+enc]);
+    function t(i){if(i>=urls.length)return Promise.resolve(null);return fetchT(urls[i],{},10000).then(function(r){if(!r.ok)throw new Error('px');return r.json()}).catch(function(){return t(i+1)})}
+    return t(0);}
+function fbProxyPut(path,body,ct){
+    var fbu=path+fbWriteSuffix();
+    var viaRelay=relayOk?relaySend(fbu,'PUT',body):Promise.reject(new Error('no relay'));
+    return viaRelay.catch(function(){return fetchT('https://corsproxy.io/?url='+encodeURIComponent(fbu),{method:'PUT',headers:{'Content-Type':ct||'application/json'},body:body},12000)}).catch(function(){return fetchT('https://api.allorigins.win/raw?url='+encodeURIComponent(fbu),{method:'PUT',headers:{'Content-Type':ct||'application/json'},body:body},12000)});
+}
+function fbProxyChats(){
+    if(!CU)return Promise.resolve();
+    return fbProxyGet(KV+'/dlg/'+CU.id+'.json').then(function(idx){
+        if(!idx||typeof idx!=='object')return;
+        var need=[];
+        Object.keys(idx).forEach(function(cid){if(String(cid).indexOf('_')<0)return;var pr=cid.split('_');
+            if(+pr[0]!==CU.id&&+pr[1]!==CU.id)return;
+            if(String(idx[cid])===String(knownIdx[cid]||''))return;
+            var cur=lastMsgTs((DB.chats||{})[cid]);
+            if(!cur||idx[cid]>=cur)need.push(cid);
+            knownIdx[cid]=idx[cid];});
+        chatSeenSave();
+        if(!need.length)return;
+        return Promise.all(need.map(function(cid){return fbProxyGet(KV+'/chats/'+cid+'.json').then(function(v){if(v){var pc={};pc[cid]=v;applyRemote(mergeDB({chats:pc}))}}).catch(function(){})}));
+    });
+}
+var pxPollBusy=false;
+function fbProxyPoll(){
+    if(pxPollBusy)return;pxPollBusy=true;
+    var pxEnd=null;pxEnd=function(){pxPollBusy=false};
+    var pxJobs=[fbProxyChats().catch(function(){}),
+        fbProxyGet(KV+'/mt.json').then(function(mt){
+        if(!mt||typeof mt!=='object')return;
+        if(mt.wipe)applyWipe(mt.wipe);
+        var need=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined&&mt[COLS[k]]!==seenMt[COLS[k]]});
+        if(!need.length)return;
+        return Promise.all(need.map(function(k){return fbProxyGet(kvPath(COLS[k])).then(function(v){return[k,v]}).catch(function(){return[k,undefined]})})).then(function(rs){
+            var partial={},ch=false;
+            rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];seenMt[COLS[x[0]]]=mt[COLS[x[0]]];ch=true}});
+            seenMtSave();
+            if(ch){applyRemote(mergeDB(partial));ensurePhotos();}
+        });
+    }).catch(function(){})];
+    Promise.all(pxJobs).catch(function(){}).then(function(){pxPollBusy=false});
+}
+function pollFallback(){fbFallbackLast=Date.now();
+    function done(txt){if(!txt||!txt.trim()||txt.trim()==='null')return;if(WIPE_ACK&&Date.now()-WIPE_ACK<300000)return;try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}/* v48: после очистки старое зеркало не воскресает данные */
+    function tryBlob(){if(!blobId)return;fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(done).catch(function(){})}
+    fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        if(txt&&txt.trim()){done(txt);fetchRegistry(function(){});}
+        else tryBlob();
+    }).catch(tryBlob);
+}
+function saveSnapshot(){
+    try{var snap=JSON.parse(JSON.stringify(DB));
+        if(snap.chats)Object.keys(snap.chats).forEach(function(cid){(snap.chats[cid]||[]).forEach(function(m){if(m){delete m.img;delete m.video}})});
+        var sj=JSON.stringify(snap);if(sj.length<3000000)lsSet('lastDB',sj);
+    }catch(e){}
+}
+function cloudLoad(cb){
+    showSync(true);var done=false;var pRemote=null;var fed=false;
+    function finish(db,ok,trusted){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;saveSnapshot();}showSync(false);ensureCreator();if(trusted&&db&&CU&&!findUserById(CU.id)&&!isCreator(CU)){CU=null;lsDel('CU');}if(cb)cb();if(pRemote){var pp=DB.presence||{};Object.keys(pRemote).forEach(function(k){var e=pRemote[k];if(e&&(!pp[k]||(pp[k].ts||0)<(e.ts||0)))pp[k]=e});DB.presence=pp;setOnlinePill();}if(!ok)cloudSave();}
+    function feed(db,trusted){
+        if(!db)return;
+        if(done){try{applyRemote(mergeDB(db));ensurePhotos();}catch(e){}return;}
+        if(!fed){fed=true;finish(db,true,trusted);}
+        else{try{applyRemote(mergeDB(db));ensurePhotos();}catch(e){}}
+    }
+    function offlineDB(){if(done)return;done=true;var ld=jGet('lastDB',null);if(ld){try{DB=mergeDB(ld);cloudReady=true;}catch(e){}}showSync(false);ensureCreator();if(cb)cb();if(ld)toast('\ud83d\udcf4','\u041e\u0444\u043b\u0430\u0439\u043d-\u0440\u0435\u0436\u0438\u043c: \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u044b \u0434\u0430\u043d\u043d\u044b\u0435 \u0441 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430, \u043e\u0431\u043d\u043e\u0432\u043b\u044e \u043a\u0430\u043a \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u044c','warning');}
+    function tryBlob(){
+        function read(){if(!blobId){if(!fed&&!done)offlineDB();return}fetchT(BLOB_API+'/'+blobId+'?t='+Date.now(),{},6000).then(function(r){return r.text()}).then(function(t2){if(t2&&t2.trim()){try{feed(JSON.parse(t2),false);return}catch(e){}}if(!fed&&!done)offlineDB()}).catch(function(){if(!fed&&!done)offlineDB()})}
+        if(blobId)read();else fetchRegistry(function(){read()});
+    }
+    function tryText(){fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){
+        if(txt&&txt.trim()){try{feed(JSON.parse(txt),false);fetchRegistry(function(){});return}catch(e){}}
+        tryBlob();
+    }).catch(function(){tryBlob()});}
+    if(!FB_DB){tryText();return;}
+    tryText();
+    fbProxyPoll();
+    var authP=(FB_KEY&&!(fbTok&&fbTokExp>Date.now()+120000))?fbAuthInit().catch(function(){return fbReauth()}):Promise.resolve(true);
+    authP.then(function(){
+        return fbMigrate().then(function(){
+            return fbGetNode(KV+'/mt',false).then(function(r){
+                if(r.status>=400)throw new Error('fb http '+r.status);
+                var mt=r.v||{};var ks=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined});
+                return Promise.all(ks.map(function(k){return fbFetchCol(k).then(function(v){return[k,v]})})).then(function(rs){
+                    var remote={};rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined)remote[x[0]]=x[1]});
+                    ks.forEach(function(k){seenMt[COLS[k]]=mt[COLS[k]]});seenMtSave();
+                    var extras=[fbGetNode(KV+'/hb',true).then(function(rr){if(rr.v){var now=Date.now(),pp={};Object.keys(rr.v).forEach(function(k){var e=rr.v[k];if(e&&e.ts&&now-e.ts<300000)pp[k]=e});pRemote=pp;}})];
+                    if(CU)extras.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(rr){if(rr.v){knownIdx=Object.assign({},rr.v);chatSeenSave();}}));
+                    if(CU)extras.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(rr){if(rr.v){var o={};o[CU.id]=rr.v;remote._notifs=o;}}));
+                    return Promise.all(extras.map(function(p2){return p2.catch(function(){})})).then(function(){feed(remote,Object.keys(mt).length>0)});
+                });
+            });
+        });
+    }).catch(function(){});
+    setTimeout(function(){if(!fed&&!done)offlineDB()},12000);
+}
+function cloudSave(cb){
+    saveQueue.push(cb);
+    if(saving)return;
+    doSave();
+}
+var offlineWarned=false;
+function doSave(){
+    if(!saveQueue.length){saving=false;return}
+    saving=true;showSync(true);lastSaved=Date.now();ensureCreator();cleanExpired();
+    (function(){var lo=jGet('localOrders',[]),ids={};DB.orders.forEach(function(o){ids[o.id]=1});lo.forEach(function(o){if(o&&o.id!==undefined&&!ids[o.id]){DB.orders.push(o);ids[o.id]=1}})})();
+    if(!FB_DB){var pl0=JSON.stringify(DB);mirrorPush(pl0,true);showSync(false);var c0=saveQueue.slice();saveQueue=[];c0.forEach(function(c){if(c)c()});saving=false;if(saveQueue.length)doSave();return}
+    var changed=Object.keys(COLS).filter(function(k){return shadowDiff(k)});
+    var chChanged=Object.keys(DB.chats||{}).filter(function(cid){return JSON.stringify(DB.chats[cid]||[])!==(SHADOW['chat:'+cid]||null)});
+    var chDeleted=Object.keys(SHADOW).filter(function(k){return k.indexOf('chat:')===0}).map(function(k){return k.slice(5)}).filter(function(cid){return!(DB.chats&&DB.chats[cid]!==undefined)});
+    var fbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
+    /* v47: ОТКАТ опасной части v46 — чтение перед записью ВСЕГДА (без префлайта устаревшая копия устройства затирала users на облаке) */
+    /* v48: после полной очистки (свежий wipe < 2 мин) пустая база — источник правды: чтения не мержим, shrink-guard отключён, старые данные не возвращаем */
+    var wipeFresh=WIPE_ACK&&Date.now()-WIPE_ACK<120000;
+    var reads=(fbDown||wipeFresh)?[]:changed.map(function(k){return fbFetchCol(k).then(function(v){return{k:k,v:v}}).catch(function(){return{k:k,v:undefined}})})
+        .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}))
+        .concat((fbDown||wipeFresh)?[]:[fbGetNode(KV+'/wipe',false).then(function(r){return{wipe:r.v}}).catch(function(){return{wipe:undefined}})]);
+    Promise.all(reads).then(function(res){
+        res.forEach(function(r){
+            try{
+                if(r.k!==undefined){if(r.v!==null&&r.v!==undefined){var pp={};pp[r.k]=r.v;DB=syncMerge(DB,pp)}}
+                else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}
+                else if(r.wipe!==undefined&&r.wipe)applyWipe(r.wipe)
+            }catch(e){}
+        });
+        var remoteUsersN=0;
+        var usersRemote=(fbDown||wipeFresh)?null:reads.filter(function(x){return x.k==='users'&&x.v})[0];
+        if(usersRemote&&usersRemote.v){var ua=Array.isArray(usersRemote.v)?usersRemote.v:null;remoteUsersN=ua?ua.filter(Boolean).length:Object.keys(usersRemote.v).length;}
+        var writes=[];var nowTs=Date.now();var pushOk=false;var hadWrites=false;
+        DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
+            writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},10000).catch(function(){return fbProxyPut(KV+'/photos/'+u.uid+'.json',JSON.stringify(ph),'text/plain')}).then(function(){pushOk=true}).catch(function(){}));
+            u.hasPhoto=1;delete u.photo;if(!PHOTO_CACHE[u.uid]){PHOTO_CACHE[u.uid]={d:ph,_t:Date.now()};photoCacheSave()}}});
+        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(!wipeFresh&&k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
+            writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000)
+                .catch(function(){return fbProxyPut(kvPath(COLS[k]),body,'application/json')})
+                .then(function(){pushOk=true;fbMarkUp();SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},10000).catch(function(){return fbProxyPut(KV+'/mt/'+COLS[k]+'.json',JSON.stringify(nowTs),'text/plain')})})
+                .then(function(){seenMt[COLS[k]]=nowTs;seenMtSave()}).catch(function(){fbMarkDown()}))});
+        chChanged.forEach(function(cid){hadWrites=true;if(fbDown)return;var msgs=DB.chats[cid]||[];var mw=[];
+            msgs.forEach(function(m){if(m&&(m.img||m.video)&&!m.media){var mid='m'+(m.id||nowTs+Math.floor(Math.random()*9999));var mm={};if(m.img)mm.img=m.img;if(m.video)mm.video=m.video;
+                mw.push(fetchT(KV+'/media/'+mid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(mm)},15000).catch(function(){}));m.media=mid;delete m.img;delete m.video}});
+            var body2=JSON.stringify(msgs);var lts=lastMsgTs(msgs)||nowTs;
+            writes.push(Promise.all(mw).then(function(){return fetchT(KV+'/chats/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body2},10000).catch(function(){return fbProxyPut(KV+'/chats/'+cid+'.json',body2,'application/json')})})
+                .then(function(){pushOk=true;SHADOW['chat:'+cid]=body2;var pr=cid.split('_');return Promise.all([pr[0],pr[1]].map(function(uid2){return fetchT(KV+'/dlg/'+uid2+'/'+cid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(lts)},10000).catch(function(){return fbProxyPut(KV+'/dlg/'+uid2+'/'+cid+'.json',JSON.stringify(lts),'text/plain')}).catch(function(){})}))})
+                .then(function(){knownIdx[cid]=lts;chatSeenSave()}))});
+        chDeleted.forEach(function(cid){hadWrites=true;if(fbDown)return;
+            writes.push(fetchT(KV+'/chats/'+cid+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})
+                .then(function(){delete SHADOW['chat:'+cid];var pr=cid.split('_');return Promise.all([pr[0],pr[1]].map(function(uid2){return fetchT(KV+'/dlg/'+uid2+'/'+cid+'.json'+fbWriteSuffix(),{method:'DELETE'},15000).catch(function(){})}))}).then(function(){pushOk=true}))});
+        Object.keys(DB._notifs||{}).forEach(function(uid){var arr=(DB._notifs[uid]||[]).map(function(x){return(x&&NOTIF_STATE.read[uid]&&NOTIF_STATE.read[uid][x.id])?Object.assign({},x,{read:true}):x});var ncl=NOTIF_STATE.cleared[uid]||0;if(ncl)arr=arr.filter(function(x){return x&&new Date(x.time).getTime()>=ncl});var sj=JSON.stringify(arr);
+            if(sj!==(SHADOW['n:'+uid]||null)){hadWrites=true;if(fbDown)return;
+                writes.push(fetchT(KV+'/notifs/'+uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:sj},15000).then(function(){pushOk=true;SHADOW['n:'+uid]=sj}).catch(function(){}))}});
+        var finalPayload=JSON.stringify(DB);
+        return Promise.allSettled(writes).then(function(){
+            var ok=pushOk||!hadWrites;
+            return (ok?Promise.resolve(false):mirrorPush(finalPayload,true)).then(function(mok){
+                if(!ok&&mok)ok=true;
+                showSync(false);
+                if(ok){offlineWarned=false;setOnlinePill();saveSnapshot();ntfyPublish({type:'refresh',cols:changed});}
+                else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}fbReauth();setTimeout(function(){if(saving)return;doSave()},10000);}
+                var cbs=saveQueue.slice();saveQueue=[];
+                cbs.forEach(function(c){if(c)c()});
+                saving=false;
+                if(saveQueue.length)doSave();
+            });
+        });
+    }).catch(function(){
+        showSync(false);saveQueue.push(null);
+        if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}
+        setTimeout(function(){if(saving)return;doSave()},10000);
+        saving=false;
+    });
+}
+var pollTimer=null;
+var pollFail=0;
+function applyRemote(f){var m=syncMerge(DB,f);if(JSON.stringify(m)!==JSON.stringify(DB)){DB=m;ensureCreator();refreshAll();}}
+var pollTick=0,fbLastOk=0,fbWarned=false,pollBusy=false,lastPollMs=0;
+function pollOnce(){
+    if(saving||pollBusy||!FB_DB)return;
+    pollBusy=true;var pollT0=Date.now();
+    pollTick++;
+    if(fbIsDown()){
+        if(FB_SECRET&&pollTick%3===1)fbGetNode(KV+'/mt',true).catch(function(){});
+        if(pollTick%2)fbProxyPoll();
+        if(pollTick%5===0)pollFallback();
+        if(pollTick%4===0)ntfyJsonPoll();
+        Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
+        return;
+    }
+    var jobs=[];
+    jobs.push(fbGetNode(KV+'/mt',true).then(function(r){
+        if(r.nc){fbLastOk=Date.now();fbWarned=false;return}
+        if(r.status>=400)throw new Error('http'+r.status);
+        fbLastOk=Date.now();fbWarned=false;
+        var mt=r.v||{};
+        /* v48: маркер полной очистки — любые устройства мгновенно сбрасывают локальные копии (не воскресают) */
+        if(mt.wipe)applyWipe(mt.wipe);
+        var need=Object.keys(COLS).filter(function(k){return mt[COLS[k]]!==undefined&&mt[COLS[k]]!==seenMt[COLS[k]]});
+        if(!need.length)return;
+        return Promise.all(need.map(function(k){return fbFetchCol(k).then(function(v){return[k,v]})})).then(function(rs){
+            var partial={},ch=false;
+            rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];seenMt[COLS[x[0]]]=mt[COLS[x[0]]];ch=true}});
+            seenMtSave();
+            if(ch){applyRemote(mergeDB(partial));ensurePhotos();}
+        });
+    }).catch(function(){
+        if(Date.now()-lastFallback>6000){lastFallback=Date.now();pollFallback();fbProxyPoll();}
+        if(!fbWarned&&fbLastOk&&Date.now()-fbLastOk>15000){fbWarned=true;toast('☁️','Firebase недоступен — работаю через запасной канал','warning');}
+    }));
+    if(!liveOk&&pollTick%4===0)ntfyJsonPoll();
+    if(CU){
+        jobs.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(r){if(r.nc||(r.status&&r.status>=400)||!r.v)return;var o={};o[CU.id]=r.v;applyRemote(mergeDB({_notifs:o}))}).catch(function(){}));
+        jobs.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(r){
+            if(r.nc||(r.status&&r.status>=400)||!r.v)return;var idx=r.v,need=[];
+            Object.keys(idx).forEach(function(cid){if(String(cid).indexOf('_')<0)return;var pr=cid.split('_');
+                if(+pr[0]!==CU.id&&+pr[1]!==CU.id)return;
+                if(String(idx[cid])===String(knownIdx[cid]||''))return;
+                var cur=lastMsgTs((DB.chats||{})[cid]);
+                if(!cur||idx[cid]>=cur)need.push(cid);
+                knownIdx[cid]=idx[cid];});
+            chatSeenSave();
+            if(!need.length)return;
+            return Promise.all(need.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(rr){if(rr.v){var pc={};pc[cid]=rr.v;applyRemote(mergeDB({chats:pc}))}}).catch(function(){})}));
+        }).catch(function(){}));
+        var ov=document.getElementById('chatOverlay');
+        if(ov){var pid=parseInt(ov.dataset.partner,10);
+            if(pid){var cid2=getChatId(CU.id,pid);
+                jobs.push(fbGetNode(KV+'/chats/'+cid2,true).then(function(rr){if(rr.nc||!rr.v)return;var pc={};pc[cid2]=rr.v;applyRemote(mergeDB({chats:pc}))}).catch(function(){}));}}
+    }
+    if(pollTick%5===0)hbFetch();
+    if(pollTick%5===2){jobs.push(fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(txt&&txt.trim()&&txt.trim()!=='null'){try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}}).catch(function(){}));}
+    Promise.all(jobs).catch(function(){}).then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
+}
+function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
+var liveSrc=null,liveOk=0,lastRefFetch=0;
+function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
+function startLive(){
+    if(liveSrc||!window.EventSource)return;
+    try{
+        liveSrc=new EventSource(NTFY_URL+'/'+NTFY_TOPIC+'/sse');liveSrc.onopen=function(){liveOk=Date.now()};liveSrc.onerror=function(){liveOk=0};
+        liveSrc.onmessage=function(ev){var d=null;try{d=JSON.parse(ev.data)}catch(e){return}handleLiveMsg(d)};
+    }catch(e){liveSrc=null}
+}
+/* v45: RTDB SSE realtime — свой живой канал прямо на firebaseio.com (работает без VPN) */
+var rtSrc=null,rtChat=null,rtOk=0,lastRtMt=0;
+function rtHandle(d){if(!d)return;try{pollOnce()}catch(e){}}
+function startRtLive(){if(rtSrc||!window.EventSource||!FB_SECRET)return;try{
+    if(rtSrc){try{if(rtSrc._hbsrc)rtSrc._hbsrc.close();}catch(e){}rtSrc.close();}
+    rtSrc=new EventSource(fbUrl()+'/kv/mt.json?auth='+encodeURIComponent(FB_SECRET));
+    rtSrc.onopen=function(){rtOk=Date.now();};
+    rtSrc.onerror=function(){rtOk=0;};
+    rtSrc.onmessage=function(ev){var now=Date.now();if(now-lastRtMt<1500)return;lastRtMt=now;rtHandle(ev.data)};
+    rtSrc.addEventListener('put',function(ev){rtHandle(ev)});
+    rtSrc.addEventListener('patch',function(ev){rtHandle(ev)});
+    var hbsrc=new EventSource(fbUrl()+'/kv/hb.json?auth='+encodeURIComponent(FB_SECRET));
+    function hbMsg(d){try{var j=typeof d==='string'?JSON.parse(d):d;var v=j&&j.data;if(!v)return;
+        var hp=DB.presence||{};Object.keys(v).forEach(function(k){var e=v[k];if(e&&e.ts&&(!hp[k]||(hp[k].ts||0)<e.ts)&&(Date.now()-e.ts<300000))hp[k]=e});
+        DB.presence=hp;rtOk=Date.now();setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}catch(e){}}
+    hbsrc.onmessage=function(ev){hbMsg(ev.data)};
+    hbsrc.addEventListener('put',function(ev){hbMsg(ev.data)});
+    hbsrc.addEventListener('patch',function(ev){hbMsg(ev.data)});
+    rtSrc._hbsrc=hbsrc;
+}catch(e){rtSrc=null}}
+function rtChatMsg(d,cid){try{var j=typeof d==='string'?JSON.parse(d):d;var v=j&&j.data;if(!v)return;
+    var msgs=Array.isArray(v)?v.filter(Boolean):Object.keys(v).map(function(k){return v[k]}).filter(Boolean);
+    var pc={};pc[cid]=msgs;applyRemote(mergeDB({chats:pc}));updateOpenChat();}catch(e){}}
+function attachRtChat(cid){try{if(rtChat){rtChat.close();rtChat=null;}}catch(e){}
+    if(!window.EventSource||!FB_SECRET)return;
+    try{rtChat=new EventSource(fbUrl()+'/kv/chats/'+cid+'.json?auth='+encodeURIComponent(FB_SECRET));
+        rtChat.onopen=function(){rtOk=Date.now();};rtChat.onerror=function(){};
+        rtChat.onmessage=function(ev){rtChatMsg(ev.data,cid)};
+        rtChat.addEventListener('put',function(ev){rtChatMsg(ev.data,cid)});
+        rtChat.addEventListener('patch',function(ev){rtChatMsg(ev.data,cid)});}catch(e){rtChat=null}}
+function handleLiveMsg(d){
+            try{
+                if(!d||!d.message)return;var m;try{m=JSON.parse(d.message)}catch(e){return}
+                if(!CU)return;
+                if(m.type==='msg'&&m.toId===CU.id){
+                    publishPresence();if(m.msg&&m.msg.id)applyLiveMsg(m.msg);pollOnce();
+                    var ov=document.getElementById('chatOverlay');
+                    if(!(ov&&parseInt(ov.dataset.partner,10)===m.fromId))toast('💬','Новое сообщение от '+(m.fromName||'?'),'info');
+                } else if(m.type==='hb'&&m.id&&m.v&&m.id!==CU.id){var hp=DB.presence||{};if(!hp[m.id]||(hp[m.id].ts||0)<(m.v.ts||0)){hp[m.id]=m.v;DB.presence=hp;setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}}else if(m.type==='refresh'){publishPresence();if(m.cols&&m.cols.length&&Date.now()-lastRefFetch>3000){lastRefFetch=Date.now();Promise.all(m.cols.map(function(ck){return (fbIsDown()?Promise.reject(new Error('down')):fbFetchCol(ck)).then(function(v){return[ck,v]}).catch(function(){return fbProxyGet(kvPath(COLS[ck])).then(function(v){return[ck,v]}).catch(function(){return[ck,undefined]})})})).then(function(rs){var partial={},ch=false;rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];ch=true}});if(ch){applyRemote(mergeDB(partial));ensurePhotos();}}).catch(function(){});}pollOnce();}
+            }catch(e){}
+}
+var lastNtfyPoll=0,ntfySeen={};
+function ntfyJsonPoll(){var now=Date.now();if(now-lastNtfyPoll<15000)return;lastNtfyPoll=now;fetchT(NTFY_URL+'/'+NTFY_TOPIC+'/json?poll=1&since=2m',{},8000).then(function(r){return r.text()}).then(function(t){var ls=t.split('\n');for(var li=0;li<ls.length;li++){var line=ls[li];if(!line.trim())continue;try{var d=JSON.parse(line);if(d.event!=='message'||ntfySeen[d.id])continue;ntfySeen[d.id]=1;handleLiveMsg(d)}catch(e){}}var ks=Object.keys(ntfySeen);if(ks.length>200){for(var ki=0;ki<ks.length-100;ki++)delete ntfySeen[ks[ki]]}}).catch(function(){})}
+function ensureCreator(){
+    var cp=normPhone(CREATOR.phone),found=false;
+    for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
+    if(!found)DB.users.push({id:1000000001,uid:'creator00001',name:CREATOR.name,phone:CREATOR.phone,email:CREATOR.email,birthDate:CREATOR.birthDate,password:'creator',role:'creator',createdAt:new Date().toISOString(),rating:0});
+    var seen={};
+    for(var j=0;j<DB.users.length;j++){var np=normPhone(DB.users[j].phone);if(np&&seen[np]){DB.users.splice(j,1);j--;}else if(np){seen[np]=1;}}
+    if(CU){var cu2=findUserById(CU.id);if(cu2){CU=cu2;}else{var cu3=findUserByPhone(CU.phone);if(cu3){CU=cu3;}lsSet('CU',JSON.stringify(CU));}}
+}
+function cleanExpired(){
+    var now=Date.now();
+    if(DB.announcements){DB.announcements=DB.announcements.filter(function(a){return !a.endTs || a.endTs>now;});}
+    if(DB.muted){for(var id in DB.muted){if(DB.muted[id].until && DB.muted[id].until<now)delete DB.muted[id];}}
+}
+
+
+/* ================= УТИЛИТЫ ================= */
+var _mem={};
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return _mem[k]!==undefined?_mem[k]:null}}
+function lsSet(k,v){try{localStorage.setItem(k,String(v))}catch(e){_mem[k]=String(v)}}
+function lsDel(k){try{localStorage.removeItem(k)}catch(e){delete _mem[k]}}
+function jGet(k,d){var r=lsGet(k);if(r==null)return d;try{return JSON.parse(r)}catch(e){return d}}
+function safeName(u){return(u&&u.name&&String(u.name).trim())?String(u.name).trim():'Пользователь'}
+function initialOf(u){return safeName(u).charAt(0).toUpperCase()}
+function pluralYears(n){var m10=n%10,m100=n%100;if(m10===1&&m100!==11)return 'год';if(m10>=2&&m10<=4&&(m100<12||m100>14))return 'года';return 'лет'}
+function ageOf(u){if(!u||!u.birthDate)return 0;var pr=String(u.birthDate).split('.');if(pr.length!==3)return 0;var d=new Date(+pr[2],+pr[1]-1,+pr[0]);if(isNaN(d.getTime()))return 0;var n=new Date();var a=n.getFullYear()-d.getFullYear();var m=n.getMonth()-d.getMonth();if(m<0||(m===0&&n.getDate()<d.getDate()))a--;return a<0?0:a}
+function photoOf(u){return (u&&u.photo)?u.photo:((u&&u.hasPhoto&&PHOTO_CACHE[u.uid])?PHOTO_CACHE[u.uid].d:null)}
+function avatarHtml(u){var ph=photoOf(u);return ph?'<img src="'+ph+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':initialOf(u)}
+function avatarProcess(file,cb){var r=new FileReader();r.onload=function(ev){var img=new Image();img.onload=function(){var max=260,w=img.width,h=img.height,k=Math.min(1,max/Math.max(w,h));var cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);cb(cv.toDataURL('image/jpeg',.72))};img.onerror=function(){toast('','Не удалось прочитать фото','error')};img.src=ev.target.result};r.readAsDataURL(file)}
+function avatarPick(){var inp=document.getElementById('avatarInput');if(!inp)return;inp.onchange=function(e){var f=e.target.files[0];if(!f||!CU)return;if(f.size>8*1024*1024){toast('','Файл слишком большой','error');return}toast('📷','Обрабатываю фото…','info');avatarProcess(f,function(d){if(d.length>120000){toast('','Фото слишком большое, выбери другое','error');return}CU.photo=d;var u=findUserById(CU.id);if(u)u.photo=d;CU._ts=Date.now();if(u)u._ts=CU._ts;lsSet('CU',JSON.stringify(CU));loadEdit();updateLoginStatus();cloudSave(function(){toast('📷','Фото профиля обновлено','success');renderPeople();});});inp.value=''};inp.click()}
+function safeStr(v){return(v==null)?'':(typeof v==='object'?JSON.stringify(v):String(v))}
+function escHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
+function normPhone(v){var d=String(v||'').replace(/\D/g,'');if(d.length===10)d='7'+d;else if(d.length===11&&d[0]==='8')d='7'+d.slice(1);else if(d.length===11&&d[0]==='7'){}else return null;return'+'+d}
+function pad2(x){return String(x).length<2?'0'+x:String(x)}
+function normBirth(v){v=String(v||'').trim();var m=v.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4})$/);if(m){var d=+m[1],mo=+m[2];if(d>=1&&d<=31&&mo>=1&&mo<=12)return pad2(d)+'.'+pad2(mo)+'.'+m[3];return null}m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);if(m){var d2=+m[3],mo2=+m[2];if(d2>=1&&d2<=31&&mo2>=1&&mo2<=12)return pad2(d2)+'.'+pad2(mo2)+'.'+m[1];return null}return null}
+function genUIDRaw(){var c='abcdefghijklmnopqrstuvwxyz0123456789',u='';for(var i=0;i<12;i++)u+=c[Math.floor(Math.random()*c.length)];return u}
+function genUID(){var used=DB.users.map(function(x){return x.uid}),u;do{u=genUIDRaw()}while(used.indexOf(u)!==-1);return u}
+function getProdPrice(id){var p=prodById(id);var base=p?p.price:0;var disc=DB.discounts?DB.discounts[id]:0;return disc>0?Math.round(base*(1-disc/100)):base}
+function isMuted(u){if(!u||!DB.muted||!DB.muted[u.id])return false;var m=DB.muted[u.id];if(m.until&&m.until<Date.now())return false;if(m.from&&m.from>Date.now())return false;return true}
+function courierRating(uid){var revs=(DB.reviews||[]).filter(function(r){return r.courierUid===uid});if(!revs.length)return 0;var sum=0;revs.forEach(function(r){sum+=(r.stars||0)});var avg=sum/revs.length;return Math.min(10,avg*2);}
+function ratingColor(pct){if(pct>=7)return'#16a34a';if(pct>=4)return'#22c55e';if(pct>=2)return'#f59e0b';if(pct>0)return'#ef4444';return'#94a3b8';}
+function toast(t,m,type){type=type||'info';var c=document.getElementById('toastContainer'),el=document.createElement('div');el.className='toast';var ic={success:'✅',error:'❌',warning:'⚠️',info:'ℹ️'};el.innerHTML='<span style="font-size:22px">'+(ic[type]||'ℹ️')+'</span><div><div class="toast-title">'+t+'</div><div class="toast-message">'+m+'</div></div>';c.appendChild(el);setTimeout(function(){el.classList.add('hiding');setTimeout(function(){el.remove()},400)},3500)}
+function hardResetCache(){confirm2('Сбросить локальный кэш устройства? Приложение перезагрузится, нужно будет заново войти в аккаунт.',function(){try{localStorage.clear()}catch(e){}try{location.reload(true)}catch(e){location.href=location.href}})}
+function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—';
+    if(fbLastOk){var d=Math.round((now-fbLastOk)/1000);fbSt=d<25?'✅ OK ('+d+' сек назад)':'⚠️ нет связи '+(d>=90?Math.round(d/60)+' мин':d+' сек');}
+    if(fbLastOk&&now-fbLastOk<25000)fbCh='Firebase (основной)';else if(fbFallbackLast&&now-fbFallbackLast<120000)fbCh='запасной (textdb/blob)';else if(fbIsDown())fbCh='прокси/зеркала (прямой канал недоступен)';
+    var hb=lastHbSent?(Math.round((now-lastHbSent)/1000)+' сек назад'):'ещё не отправлялся';
+    var who=CU?(safeName(CU)+' · id '+CU.id+' · '+(roleOf(CU)||'')):'❌ не залогинен — онлайн-пульс не отправляется';
+    var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
+    o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
+    +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
+    +'<div>Версия приложения: <b>v49</b></div>'
+    +'<div>Вы: <b>'+who+'</b></div>'
+    +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
+    +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
+    +'<div>Firebase: <b>'+fbSt+'</b></div>'
+    +'<div>Канал данных: <b>'+fbCh+'</b></div>'
+    +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
+    +'<div>Офлайн-копия на устройстве: <b>'+(jGet('lastDB',null)?'✅ есть':'нет')+'</b></div>'
+    +'<div>Ретранслятор на сайте: <b>'+(relayOk?'✅ работает (данные через твой домен)':'❌ нет')+'</b></div>'
+    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
+    +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
+    +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
+    var old=document.getElementById('diagOv');if(old)old.remove();
+    document.body.appendChild(o);
+}
+function confirm2(msg,cb){var o=document.createElement('div');o.className='modal-overlay';o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">⚠️ Подтверждение</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div><p style="margin:12px 0;color:var(--text-secondary)">'+msg+'</p><button class="btn btn-danger" id="cy">Да</button><button class="btn btn-gray" id="cn">Отмена</button></div>';document.body.appendChild(o);o.querySelector('#cy').onclick=function(){o.remove();cb()};o.querySelector('#cn').onclick=function(){o.remove()}}
+
+
+
+/* ================= ГЕО + IP (для "одной сети") ================= */
+function fetchGeo(){
+    fetch('https://ipwho.is/').then(function(r){return r.json()}).then(function(d){if(d&&d.ip){myGeo={ip:d.ip,city:d.city||''};myIP=d.ip;publishPresence();}}).catch(function(){});
+}
+function publishPresence(){
+    if(!CU)return;
+    var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
+    DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
+    var hbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
+    /* v49: каскад пульса direct→прокси→релей — иначе devices не видят друг друга без VPN */
+    if(!FB_DB){mirrorPush(JSON.stringify(DB),false);return;}
+    var hbP=KV+'/hb/'+CU.id+'.json',hbBody=JSON.stringify(v);var hbOk=false;
+    (hbDown?Promise.reject(new Error('hbdown')):fetchT(hbP+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:hbBody},8000).then(function(r){if(r&&r.status>=400)throw new Error('hb http'+r.status)}))
+    .then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0;fbMarkUp()})
+    .catch(function(){return fbProxyPut(hbP,hbBody,'application/json').then(function(r){if(r&&r.status>=400)throw new Error('hbpx '+r.status);hbOk=true;hbLastOk=Date.now();hbFailN=0})})
+    .catch(function(){if(relayOk)return relaySend(hbP+fbWriteSuffix(),'PUT',hbBody).then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0})})
+    .catch(function(){})
+    .then(function(){if(!hbOk){hbFailN++;mirrorPush(JSON.stringify(DB),false);if(hbFailN>=2&&fbTokMode!=='secret'&&FB_SECRET)fbSecretProbe().catch(function(){})}});d>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>КАРАВАН - Доставка воды</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+--primary:#3b82f6;--secondary:#06b6d4;--accent:#0ea5e9;
+--success:#10b981;--danger:#ef4444;--warning:#f59e0b;--gold:#fbbf24;
+--bg:#f0f9ff;--card:#fff;--text:#0f172a;--text-secondary:#475569;--border:#e0f2fe;
+--radius:20px;--radius-sm:12px;--transition:all .35s cubic-bezier(.4,0,.2,1);
+--header-bg:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 50%,#93c5fd 100%);
+--header-text:#0c4a6e;
+}
+body.dark{--bg:#0a0e1a;--card:#141a2e;--text:#e0e7ff;--text-secondary:#94a3b8;--border:#1e293b;--header-bg:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0c1425 100%);--header-text:#dbeafe}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0f2fe,#bae6fd,#7dd3fc);min-height:100vh;padding:20px;color:var(--text);transition:var(--transition);position:relative;overflow-x:hidden}
+body.dark{background:linear-gradient(135deg,#020617,#0f172a,#1e1b4b)}
+body.dark::before{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(2px 2px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 40% 70%,#fff,transparent),radial-gradient(2px 2px at 70% 40%,#fff,transparent),radial-gradient(1px 1px at 90% 80%,#fff,transparent);background-size:400px 400px;opacity:.4;pointer-events:none;z-index:0;animation:twinkle 8s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:.3}50%{opacity:.6}}
+#splash{position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#e0f2fe,#bae6fd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .5s;padding:30px;text-align:center}
+body.dark #splash{background:linear-gradient(135deg,#020617,#0f172a)}
+#splash.hide{opacity:0;pointer-events:none}
+#splash img{width:170px;border-radius:18px;box-shadow:0 20px 50px rgba(2,132,199,.35);animation:logoFloat 3s ease-in-out infinite}
+#splash .sp-top{font-size:17px;font-weight:800;color:#0369a1;line-height:1.5;max-width:340px}
+body.dark #splash .sp-top{color:#93c5fd}
+#splash .sp-load{width:190px;height:6px;border-radius:10px;background:rgba(59,130,246,.2);overflow:hidden}
+#splash .sp-load span{display:block;width:40%;height:100%;border-radius:10px;background:linear-gradient(90deg,var(--primary),var(--secondary));animation:loadBar 1.2s ease-in-out infinite}
+@keyframes loadBar{0%{transform:translateX(-100%)}100%{transform:translateX(450%)}}
+#splash .sp-bottom{font-size:12px;font-weight:600;color:#64748b;max-width:320px;line-height:1.5}
+body.dark #splash .sp-bottom{color:#94a3b8}
+@keyframes logoFloat{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)}}
+.app{max-width:480px;margin:0 auto;background:var(--card);border-radius:32px;overflow:hidden;box-shadow:0 35px 60px -15px rgba(0,0,0,.3);position:relative;z-index:1}
+.header{background:var(--header-bg);color:var(--header-text);padding:24px 25px;text-align:center;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.3),transparent 60%);animation:pulse 4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.1);opacity:.7}}
+.header-content{position:relative;z-index:1}
+.top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.top-btn{background:rgba(255,255,255,.4);border:none;color:var(--header-text);width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:var(--transition);position:relative}
+body.dark .top-btn{background:rgba(255,255,255,.1)}
+.notif-dot{position:absolute;top:5px;right:5px;width:10px;height:10px;background:var(--danger);border-radius:50%;border:2px solid #fff}
+.logo-container{display:flex;align-items:center;justify-content:center;gap:15px;margin-bottom:8px}
+.logo-icon{width:60px;height:60px;background:#fff;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 10px 30px rgba(14,165,233,.5);animation:logoFloat 3s ease-in-out infinite;overflow:hidden;flex-shrink:0}
+.logo-icon img{width:100%;height:100%;object-fit:cover;border-radius:18px}
+.header h1{font-size:34px;font-weight:900;letter-spacing:4px;background:linear-gradient(135deg,#0369a1,#0ea5e9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+body.dark .header h1{background:linear-gradient(135deg,#93c5fd,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{font-size:12px;opacity:.85;margin-top:4px;letter-spacing:2px;text-transform:uppercase}
+.online-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;margin-top:8px;padding:5px 12px;background:rgba(16,185,129,.2);color:#059669;border-radius:50px;border:1px solid rgba(16,185,129,.3)}
+body.dark .online-pill{background:rgba(16,185,129,.15);color:#34d399}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#10b981;box-shadow:0 0 8px #10b981;animation:pulseDot 2s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.5}}
+.nav{display:flex;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;padding:6px;gap:3px}
+.nav::-webkit-scrollbar{display:none}
+.nav button{flex:1;min-width:fit-content;padding:10px 8px;background:0 0;border:none;font-size:11px;cursor:pointer;white-space:nowrap;transition:var(--transition);font-weight:600;color:var(--text-secondary);border-radius:10px;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px}
+.nav button.active{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;box-shadow:0 4px 15px rgba(59,130,246,.4)}
+.nav-icon{font-size:16px}.nav-label{font-size:10px}
+.page{display:none;padding:20px;animation:slideIn .4s cubic-bezier(.4,0,.2,1);min-height:300px}
+.page.active{display:block}
+@keyframes slideIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+h2{color:var(--text);margin-bottom:18px;font-size:22px;font-weight:800;display:flex;align-items:center;gap:10px}
+h2::before{content:'';width:5px;height:26px;background:linear-gradient(180deg,var(--primary),var(--secondary));border-radius:10px;flex-shrink:0}
+h3{margin:16px 0 10px;color:var(--text);font-weight:700;font-size:14px}
+.btn{width:100%;padding:14px 20px;margin:8px 0;border:none;border-radius:var(--radius-sm);font-size:14px;cursor:pointer;transition:var(--transition);font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,.15)}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff}
+.btn-success{background:linear-gradient(135deg,var(--success),#059669);color:#fff}
+.btn-danger{background:linear-gradient(135deg,var(--danger),#dc2626);color:#fff}
+.btn-warning{background:linear-gradient(135deg,var(--warning),#d97706);color:#fff}
+.btn-gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.btn-outline{background:0 0;border:2px solid var(--primary);color:var(--primary)}
+.btn-gray{background:var(--bg);color:var(--text-secondary)}
+.btn-sm{padding:8px 14px;font-size:12px;margin:4px 0}
+.btn-back{background:var(--bg);color:var(--text);padding:10px 16px;font-size:13px;width:auto;margin-bottom:15px}
+.btn-row{display:flex;gap:8px}.btn-row .btn{flex:1}
+.form-group{margin-bottom:15px}
+.form-group label{display:block;margin-bottom:6px;font-weight:600;color:var(--text);font-size:13px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px 16px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg);font-family:inherit;color:var(--text)}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary);background:var(--card)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.info-block{background:var(--bg);padding:16px;margin:12px 0;border-radius:var(--radius);border-left:5px solid var(--primary)}
+.info-block.warning{background:#fef3c7;border-left-color:var(--warning);color:#78350f}
+body.dark .info-block.warning{background:#3f2f0a;color:#fbbf24}
+.info-block.success{background:#d1fae5;border-left-color:var(--success);color:#064e3b}
+body.dark .info-block.success{background:#0a2e21;color:#6ee7b7}
+.info-block.danger{background:#fee2e2;border-left-color:var(--danger);color:#7f1d1d}
+body.dark .info-block.danger{background:#3a0a0a;color:#fca5a5}
+.info-block p{margin:6px 0;font-size:13px}
+.price{font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin:20px 0}
+.price small{display:block;font-size:13px;font-weight:500;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary);margin-top:4px}
+footer{text-align:center;padding:20px;background:linear-gradient(135deg,#1e293b,#0f172a);color:rgba(255,255,255,.7);font-size:12px}
+footer strong{color:var(--accent)}
+.product-carousel{position:relative;overflow:hidden;border-radius:var(--radius);touch-action:pan-y}
+.product-track{display:flex;transition:transform .35s cubic-bezier(.4,0,.2,1)}
+.product-slide{min-width:100%;padding:6px}
+.product-card-big{background:var(--card);border-radius:var(--radius);padding:20px;border:2px solid var(--border);text-align:center}
+.product-card-big.selected{border-color:var(--primary);background:linear-gradient(135deg,rgba(59,130,246,.05),rgba(6,182,212,.05))}
+.product-big-img{width:100%;max-height:180px;object-fit:contain;border-radius:12px;margin-bottom:12px;background:var(--bg)}
+.product-big-icon{font-size:64px;margin-bottom:12px}
+.product-big-name{font-weight:800;font-size:17px;margin-bottom:4px}
+.product-big-desc{font-size:12px;color:var(--text-secondary);margin-bottom:10px}
+.product-big-price{font-weight:900;font-size:24px;color:var(--primary)}
+.carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
+.carousel-dot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:.2s}
+.carousel-dot.active{background:var(--primary);width:22px;border-radius:4px}
+.carousel-hint{text-align:center;font-size:11px;color:var(--text-secondary);margin-top:6px}
+.cart-item{display:flex;justify-content:space-between;align-items:center;background:var(--card);padding:13px;margin-bottom:10px;border-radius:var(--radius-sm);border:1px solid var(--border)}
+.cart-item-name{font-weight:700;font-size:13px}
+.cart-item-price{font-size:12px;color:var(--text-secondary)}
+.cart-item-controls{display:flex;align-items:center;gap:6px}
+.qty-btn{width:28px;height:28px;border:none;border-radius:8px;cursor:pointer;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.qty-btn.minus{background:#fee2e2;color:var(--danger)}
+.qty-btn.plus{background:#d1fae5;color:var(--success)}
+body.dark .qty-btn.minus{background:#3a0a0a;color:#fca5a5}
+body.dark .qty-btn.plus{background:#0a2e21;color:#6ee7b7}
+.qty-display{font-weight:700;min-width:24px;text-align:center}
+.remove-btn{background:var(--danger);color:#fff;border:none;width:30px;height:30px;border-radius:8px;cursor:pointer}
+.role-select{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.role-option{padding:12px 8px;text-align:center;background:var(--bg);border-radius:var(--radius-sm);cursor:pointer;border:2px solid transparent;font-size:11px;font-weight:600}
+.role-option.selected{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff}
+.role-option .role-icon{font-size:24px;display:block;margin-bottom:6px}
+.toast-container{position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:320px}
+.toast{background:var(--card);padding:14px 18px;border-radius:var(--radius-sm);box-shadow:0 10px 40px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;animation:toastIn .4s;color:var(--text)}
+.toast.hiding{animation:toastOut .4s forwards}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+@keyframes toastOut{to{opacity:0;transform:translateX(100%)}}
+.toast-title{font-weight:700;font-size:13px}
+.toast-message{font-size:12px;color:var(--text-secondary)}
+.order-card{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px;border:1px solid var(--border)}
+.order-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);gap:10px}
+.order-id{font-weight:800;font-size:14px}
+.order-date{font-size:11px;color:var(--text-secondary);margin-top:3px}
+.order-status{padding:5px 12px;border-radius:50px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.order-status.pending{background:#fef3c7;color:#92400e}
+.order-status.processing{background:#dbeafe;color:#1e40af}
+.order-status.delivered{background:#d1fae5;color:#065f46}
+.order-status.cancelled{background:#fee2e2;color:#991b1b}
+body.dark .order-status.pending{background:#3f2f0a;color:#fbbf24}
+body.dark .order-status.processing{background:#0a2540;color:#93c5fd}
+body.dark .order-status.delivered{background:#0a2e21;color:#6ee7b7}
+body.dark .order-status.cancelled{background:#3a0a0a;color:#fca5a5}
+.order-item{display:flex;justify-content:space-between;padding:5px 0;font-size:13px}
+.order-total{display:flex;justify-content:space-between;font-weight:700;font-size:16px;color:var(--primary);padding-top:12px;border-top:2px dashed var(--border)}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:18px 0}
+.stat-card{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:18px;border-radius:var(--radius);text-align:center}
+.stat-card:nth-child(2){background:linear-gradient(135deg,var(--success),#059669)}
+.stat-card:nth-child(3){background:linear-gradient(135deg,var(--warning),#d97706)}
+.stat-card:nth-child(4){background:linear-gradient(135deg,var(--danger),#dc2626)}
+.stat-value{font-size:28px;font-weight:900}
+.stat-label{font-size:11px;opacity:.9;text-transform:uppercase}
+.empty-state{text-align:center;padding:35px 20px;color:var(--text-secondary)}
+.empty-state-icon{font-size:55px;margin-bottom:12px}
+.feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:18px 0}
+.feature-card{background:var(--card);padding:18px;border-radius:var(--radius);text-align:center;border:1px solid var(--border);cursor:pointer}
+.feature-icon{font-size:36px;margin-bottom:8px}
+.feature-title{font-weight:700;font-size:13px}
+.feature-desc{font-size:11px;color:var(--text-secondary)}
+.badge{display:inline-block;padding:3px 10px;border-radius:50px;font-size:11px;font-weight:700}
+.badge-gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.badge-primary{background:rgba(59,130,246,.15);color:var(--primary)}
+.badge-success{background:rgba(16,185,129,.15);color:var(--success)}
+.divider{height:1px;background:var(--border);margin:18px 0}
+.promo-input{display:flex;gap:8px}
+.promo-input input{flex:1}
+.promo-btn{padding:12px 18px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);font-weight:600;cursor:pointer}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--card);border-radius:var(--radius);padding:24px;width:100%;max-width:440px;max-height:88vh;overflow-y:auto;color:var(--text)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.modal-title{font-size:18px;font-weight:800}
+.modal-close{background:var(--danger);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-weight:700}
+.user-list-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;border:1px solid var(--border)}
+.user-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;flex-shrink:0;position:relative}
+.user-avatar.gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.online-indicator{position:absolute;bottom:0;right:0;width:12px;height:12px;background:var(--success);border-radius:50%;border:2px solid var(--card)}
+.user-info-name{font-weight:700;font-size:13px}
+.user-info-id{font-size:10px;color:var(--primary);font-weight:600}
+.user-info-last{font-size:10px;color:var(--text-secondary)}
+.unread-badge{background:var(--danger);color:#fff;border-radius:50%;min-width:22px;height:22px;padding:0 6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;margin-left:auto}
+.chat-messages{height:340px;overflow-y:auto;padding:15px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.chat-message{max-width:80%}
+.chat-message.own{align-self:flex-end}
+.msg-bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.5}
+.own .msg-bubble{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border-bottom-right-radius:4px}
+.msg-text{word-break:break-word;white-space:pre-wrap}
+.other .msg-bubble{background:var(--card);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg-time{font-size:10px;color:var(--text-secondary);margin-top:3px}
+.own .msg-time{text-align:right}
+.msg-sender{font-size:11px;font-weight:600;color:var(--primary);margin-bottom:3px}
+.chat-input-row{display:flex;gap:6px;align-items:center}
+.chat-input-row input{flex:1;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg);color:var(--text)}
+.chat-btn{padding:11px 14px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer}
+.chat-btn.photo{background:linear-gradient(135deg,var(--success),#059669)}
+.collapsible-header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border-radius:var(--radius-sm);cursor:pointer;font-weight:700;font-size:14px;margin-bottom:2px}
+.collapsible-arrow{transition:var(--transition);font-size:12px}
+.collapsible-arrow.open{transform:rotate(180deg)}
+.collapsible-content{display:none;padding:15px 0}
+.collapsible-content.open{display:block}
+.admin-section{margin-bottom:15px}
+.user-admin-card{background:var(--card);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.ua-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ua-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0}
+.ua-avatar.gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.ua-controls{display:flex;gap:6px;flex-wrap:wrap}
+.ua-controls select,.ua-controls input{padding:6px 10px;border:2px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--text)}
+.ua-btn{padding:6px 12px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+.profile-uid{font-size:14px;color:var(--primary);font-weight:700;letter-spacing:2px;margin:6px 0 12px;background:var(--bg);padding:6px 12px;border-radius:8px;display:inline-block}
+.edit-avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;font-weight:800;margin:0 auto 15px}
+.edit-avatar.gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.calc-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px}
+.calc{background:#1a1a2e;border-radius:24px;padding:20px;width:320px;position:relative}
+.calc-display{background:#0f0a1e;border-radius:16px;padding:20px;margin-bottom:15px;text-align:right;min-height:80px}
+.calc-expr{font-size:14px;color:rgba(255,255,255,.5);min-height:20px}
+.calc-result{font-size:36px;font-weight:800;color:#fff}
+.calc-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.calc-btn{padding:18px;border:none;border-radius:12px;font-size:20px;font-weight:700;cursor:pointer}
+.calc-btn.num{background:#2a2a4a;color:#fff}
+.calc-btn.op{background:var(--primary);color:#fff}
+.calc-btn.eq{background:var(--success);color:#fff}
+.calc-btn.clear{background:var(--danger);color:#fff}
+.calc-btn.spec{background:#3a3a5a;color:#fbbf24}
+.calc-btn.zero{grid-column:span 2}
+.calc-close{position:absolute;top:12px;right:16px;background:var(--danger);border:none;color:#fff;font-size:22px;cursor:pointer;width:34px;height:34px;border-radius:50%}
+.company-post{background:linear-gradient(135deg,#dbeafe,#bfdbfe);border:2px solid var(--primary);border-radius:var(--radius);padding:16px;margin:12px 0;position:relative;color:#0c4a6e}
+body.dark .company-post{background:linear-gradient(135deg,#0a2540,#0c1425);color:#93c5fd;border-color:#38bdf8}
+.company-post .pin{position:absolute;top:10px;right:12px;font-size:18px}
+.company-post .badge-co{display:inline-block;background:var(--primary);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:50px;margin-bottom:8px}
+.company-post p{font-size:13px;line-height:1.6}
+.company-post .sign{font-size:11px;opacity:.7;margin-top:8px;font-style:italic}
+.announce-card{background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid var(--warning);border-radius:var(--radius);padding:16px;margin:12px 0;position:relative;color:#78350f}
+body.dark .announce-card{background:linear-gradient(135deg,#3f2f0a,#4a3410);color:#fbbf24}
+.announce-card.pinned{border-color:var(--primary);border-width:3px}
+.announce-pin{position:absolute;top:10px;right:10px;font-size:18px}
+.announce-card h4{font-size:14px;margin-bottom:6px}
+.announce-card p{font-size:13px;line-height:1.5}
+.announce-time{font-size:11px;opacity:.7;margin-top:6px}
+.payment-method{display:flex;gap:10px;margin:15px 0}
+.payment-option{flex:1;padding:15px;border:2px solid var(--border);border-radius:var(--radius-sm);text-align:center;cursor:pointer}
+.payment-option.selected{border-color:var(--primary);background:rgba(59,130,246,.05)}
+.payment-option .icon{font-size:24px;margin-bottom:5px}
+.payment-option .label{font-size:12px;font-weight:600}
+.order-step{background:var(--card);padding:14px;border-radius:var(--radius-sm);margin-bottom:6px;border:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.order-step-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
+.order-step-text{flex:1;font-size:12px}
+.order-arrow{text-align:center;color:var(--primary);font-size:16px}
+.about-logo{width:100%;border-radius:16px;margin:8px 0 14px}
+.star-rating{display:flex;gap:4px;justify-content:center;margin:10px 0}
+.star-rating span{font-size:30px;cursor:pointer;filter:grayscale(1);opacity:.4}
+.star-rating span.active{filter:none;opacity:1}
+.notif-panel{position:fixed;top:80px;right:20px;background:var(--card);border-radius:var(--radius);padding:15px;width:320px;max-height:400px;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);z-index:9500;border:1px solid var(--border)}
+.notif-item{padding:10px;border-radius:8px;margin-bottom:6px;background:var(--bg);border-left:3px solid var(--primary);font-size:12px}
+.notif-time{font-size:10px;color:var(--text-secondary);margin-top:3px}
+.sync-badge{position:fixed;bottom:10px;left:10px;background:rgba(16,185,129,.9);color:#fff;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;z-index:9998;display:none}
+.sync-badge.show{display:block}
+.rating-gauge{position:relative;width:120px;height:70px;margin:10px auto}
+.rating-gauge svg{width:120px;height:70px}
+.rating-gauge .val{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:18px;font-weight:900}
+.review-q{background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin:10px 0;font-size:13px;font-weight:600}
+/* Скидки на товарах в карусели */
+.price-row{display:flex;align-items:center;justify-content:center;gap:10px}
+.price-was{font-size:14px;font-weight:600;color:var(--text-secondary);text-decoration:line-through}
+.disc-flag{display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:800;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;letter-spacing:.3px}
+/* Современные списки админки */
+.list-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(2,132,199,.06);transition:var(--transition)}
+.list-item:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(2,132,199,.12)}
+.list-ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden}
+.list-ico img{width:100%;height:100%;object-fit:cover}
+.li-blue{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(6,182,212,.15))}
+.li-gold{background:linear-gradient(135deg,rgba(251,191,36,.22),rgba(245,158,11,.22))}
+.li-red{background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(220,38,38,.12))}
+.list-main{flex:1;min-width:0}
+.list-title{font-weight:700;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-sub{font-size:11px;color:var(--text-secondary);margin-top:2px}
+.pct-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;flex-shrink:0}
+.chip-gold{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.chip-blue{background:linear-gradient(135deg,var(--primary),var(--secondary))}
+.del-x{width:32px;height:32px;border:none;border-radius:10px;background:rgba(239,68,68,.12);color:var(--danger);font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;transition:var(--transition)}
+.del-x:hover{background:var(--danger);color:#fff}
+/* ЧАТ V2: современные бейджи ролей, галочки, видео */
+.role-chip{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;line-height:1.4}
+.role-chip.rc-creator{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#451a03}
+.role-chip.rc-admin{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+.role-chip.rc-worker{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.role-chip.rc-client{background:rgba(100,116,139,.15);color:#64748b}
+body.dark .role-chip.rc-client{background:rgba(148,163,184,.18);color:#cbd5e1}
+.msg-day{align-self:center;background:rgba(100,116,139,.15);color:var(--text-secondary);font-size:10px;font-weight:700;padding:3px 12px;border-radius:20px;margin:6px 0}
+.chat-message{animation:msgIn .25s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-img{max-width:210px;border-radius:12px;display:block}
+.msg-bubble video{max-width:220px;border-radius:12px;display:block;background:#000}
+.tick{display:inline-flex;margin-left:5px;vertical-align:middle}
+.tick svg{width:14px;height:14px}
+.tick svg path{stroke:rgba(255,255,255,.75)}
+.other .tick svg path{stroke:var(--text-secondary)}
+.chat-btn{border-radius:50%;width:42px;height:42px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s}
+.chat-btn:active{transform:scale(.88)}
+.chat-btn svg{width:18px;height:18px}
+.chat-btn.send{background:linear-gradient(135deg,var(--primary),var(--secondary))}
+.chat-btn.photo{background:linear-gradient(135deg,var(--success),#059669)}
+.chat-btn.video{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.chat-input-row input{border-radius:24px;min-width:0}
+.gender-select{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* v21: полноэкранный чат */
+.chat-ov{padding:0;align-items:stretch}
+.modal.chat-full{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;display:flex;flex-direction:column;padding:14px}
+.modal.chat-full .chat-messages{flex:1;height:auto;max-height:none}
+.modal.chat-full .chat-input-row{flex-shrink:0}
+/* v21: полноэкранная заглушка */
+#muteOverlay{position:fixed;inset:0;z-index:99998;background:linear-gradient(160deg,#020617,#0f172a 60%,#1e1b4b);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:16px}
+#muteOverlay .mo-ico{font-size:70px;filter:drop-shadow(0 0 25px rgba(239,68,68,.45));animation:moPulse 2.2s ease-in-out infinite}
+@keyframes moPulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.08);opacity:1}}
+#muteOverlay .mo-title{font-size:24px;font-weight:900;color:#fca5a5;letter-spacing:1px}
+#muteOverlay .mo-card{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:16px;padding:16px 20px;max-width:380px;text-align:left;color:#e0e7ff;font-size:13px;line-height:1.8}
+#muteOverlay .mo-card p{margin:2px 0}
+#muteOverlay .mo-sub{font-size:11px;color:#94a3b8;max-width:330px;line-height:1.6}
+/* v21: анимированная космо-тема (метеоры + аврора) */
+body.dark::after{content:'';position:fixed;top:-20%;left:-20%;width:140%;height:140%;z-index:0;pointer-events:none;background:radial-gradient(600px 400px at 15% 20%,rgba(56,189,248,.14),transparent 60%),radial-gradient(520px 360px at 85% 75%,rgba(99,102,241,.14),transparent 60%),radial-gradient(400px 300px at 60% 10%,rgba(14,165,233,.10),transparent 60%);animation:auroraMove 16s ease-in-out infinite alternate}
+@keyframes auroraMove{0%{transform:translate(0,0) scale(1)}50%{transform:translate(-3%,2%) scale(1.07)}100%{transform:translate(2%,-3%) scale(1.02)}}
+#fxLayer{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}
+body.dark #fxLayer{display:block}
+.fx-meteor{position:absolute;background:#fff;border-radius:50%;opacity:0;box-shadow:0 0 8px 2px rgba(147,197,253,.75)}
+.fx-meteor::before{content:'';position:absolute;top:50%;left:100%;width:120px;height:1.5px;transform:translateY(-50%);background:linear-gradient(90deg,rgba(147,197,253,.9),transparent)}
+.fx-meteor.run{animation:fxMeteor linear infinite}
+@keyframes fxMeteor{0%{opacity:0;transform:translate(0,0) rotate(-40deg)}4%{opacity:1}16%{opacity:0;transform:translate(-380px,320px) rotate(-40deg)}100%{opacity:0;transform:translate(-380px,320px) rotate(-40deg)}}
+.msg-media-load{font-size:12px;color:var(--text-secondary);padding:6px 2px}
+.pv-overlay{position:fixed;inset:0;background:rgba(5,8,16,.97);z-index:10000;display:flex;align-items:center;justify-content:center;touch-action:none}
+.pv-img{max-width:96vw;max-height:82vh;transform-origin:center center;transition:transform .15s ease-out;border-radius:8px;box-shadow:0 10px 60px rgba(0,0,0,.6)}
+.pv-close{position:fixed;top:12px;right:14px;z-index:10001;width:44px;height:44px;border-radius:50%;border:1px solid #2a3a5f;background:rgba(14,22,40,.92);color:#fff;font-size:20px;cursor:pointer}
+.pv-cap{position:fixed;bottom:16px;left:0;right:0;text-align:center;color:#8fa3c8;font-size:12px;z-index:10001;pointer-events:none}
+@media(max-width:500px){body{padding:10px}.header h1{font-size:30px}.page{padding:16px}h2{font-size:18px}.form-row,.stats-grid,.feature-grid,.role-select{grid-template-columns:1fr}.toast-container,.notif-panel{left:10px;right:10px;width:auto}.calc{width:280px}}
+
+/* ===== v17: гендер (розовый/синий) ===== */
+.gender-select .role-option[data-gender="male"].selected{background:linear-gradient(135deg,#2563eb,#38bdf8);box-shadow:0 4px 15px rgba(37,99,235,.4)}
+.gender-select .role-option[data-gender="female"].selected{background:linear-gradient(135deg,#db2777,#f472b6);box-shadow:0 4px 15px rgba(236,72,153,.45)}
+/* ===== v17: аватар с камерой ===== */
+.edit-avatar{position:relative;overflow:visible}
+.edit-avatar img{border-radius:50%}
+.edit-avatar .av-cam{position:absolute;bottom:-2px;right:-2px;width:30px;height:30px;background:linear-gradient(135deg,#2563eb,#38bdf8);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid var(--card);z-index:2;box-shadow:0 4px 12px rgba(37,99,235,.4)}
+.user-avatar img,.ua-avatar img{border-radius:50%}
+/* ===== v17 UI REFRESH: современная тёмная тема с голубым ===== */
+:root{--violet:#8b5cf6}
+h2::before{background:linear-gradient(180deg,#60a5fa,#8b5cf6)}
+.nav button.active{background:linear-gradient(135deg,#2563eb,#38bdf8);box-shadow:0 6px 20px rgba(56,189,248,.45)}
+.btn-primary{background:linear-gradient(135deg,#2563eb,#38bdf8);box-shadow:0 6px 20px rgba(37,99,235,.35)}
+.btn-primary:hover{box-shadow:0 10px 28px rgba(37,99,235,.5)}
+.collapsible-header{background:linear-gradient(135deg,#1d4ed8,#0891b2)}
+.stat-card{border-radius:16px}
+.feature-card{transition:var(--transition)}
+.feature-card:active{transform:scale(.97);border-color:var(--primary)}
+.user-avatar{box-shadow:0 4px 12px rgba(37,99,235,.3)}
+body.dark{--bg:#0a1120;--card:#0e1628;--text:#eaf1ff;--text-secondary:#9db0d0;--border:#1c2a47;--header-bg:linear-gradient(135deg,#0b1428 0%,#12203f 50%,#0b1428 100%);--header-text:#d7e6ff}
+body.dark{background:radial-gradient(900px 500px at 85% -5%,rgba(59,130,246,.22),transparent 60%),radial-gradient(700px 450px at -10% 40%,rgba(139,92,246,.16),transparent 55%),radial-gradient(600px 400px at 50% 110%,rgba(6,182,212,.12),transparent 55%),linear-gradient(160deg,#04070f,#0a1120 55%,#050914)}
+body.dark::before{opacity:.55;background-size:280px 280px}
+body.dark .app{border:1px solid rgba(96,165,250,.22);box-shadow:0 0 80px rgba(59,130,246,.18),0 35px 60px -15px rgba(0,0,0,.6)}
+body.dark .header::before{background:radial-gradient(circle,rgba(96,165,250,.25),transparent 60%)}
+body.dark .header h1{background:linear-gradient(135deg,#7dd3fc,#818cf8);-webkit-background-clip:text;background-clip:text}
+body.dark .user-admin-card,body.dark .order-card,body.dark .feature-card{border-color:rgba(96,165,250,.18)}
+body.dark .user-list-item{background:linear-gradient(135deg,rgba(30,58,138,.18),rgba(14,22,40,.6));border-color:rgba(96,165,250,.2)}
+body.dark .user-list-item:active{border-color:rgba(96,165,250,.5)}
+body.dark .form-group input,body.dark .form-group select,body.dark .form-group textarea{background:#0a1322;border-color:#22345c}
+body.dark .info-block{background:rgba(30,64,175,.12);border-left-color:#3b82f6;color:#c7d7f5}
+body.dark .info-block.warning{background:rgba(245,158,11,.1);color:#fcd34d}
+body.dark .info-block.success{background:rgba(16,185,129,.1);color:#6ee7b7}
+body.dark .info-block.danger{background:rgba(239,68,68,.1);color:#fca5a5}
+body.dark .company-post{background:linear-gradient(135deg,rgba(30,64,175,.2),rgba(14,22,40,.4));border-color:#3b82f6;color:#bfdbfe}
+body.dark .modal{background:#0e1628;border:1px solid rgba(96,165,250,.25);box-shadow:0 0 60px rgba(59,130,246,.2)}
+body.dark .chat-messages{background:#0a1322}
+body.dark .other .msg-bubble{background:#141f38;border-color:#24365e}
+body.dark .stat-card{box-shadow:0 8px 24px rgba(37,99,235,.25)}
+body.dark .toast{background:#101a30;border:1px solid rgba(96,165,250,.25)}
+body.dark .nav button{color:#8fa3c8}
+body.dark .nav button.active{color:#fff}
+body.dark .empty-state-text{color:#9db0d0}
+body.dark .profile-uid{background:rgba(59,130,246,.12);color:#7dd3fc}
+body.dark footer{background:linear-gradient(135deg,#0a1120,#060a16)}
+body.dark #splash{background:radial-gradient(700px 400px at 70% 20%,rgba(59,130,246,.18),transparent 60%),linear-gradient(160deg,#04070f,#0a1120)}
+body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
+
+
+/* v44: waybill print */
+@media print{body>*:not(#wbOv){display:none!important}#wbOv{display:flex!important;position:static!important;background:#fff!important;padding:0!important;z-index:99999}#wbOv .modal{box-shadow:none!important;margin:0!important;max-width:100%!important;width:100%!important;border-radius:0!important}}
+</style>
+</head>
+<body>
+<div id="fxLayer"></div>
+<div id="muteOverlay"></div>
+
+
+<!-- ЗАДАЧА 1: новый текст заставки (верх + низ) -->
+<div id="splash">
+    <img src="https://static.tildacdn.com/tild3461-6461-4666-b138-653933353666/pic-01-tiny.png" alt="КАРАВАН" onerror="this.outerHTML='🐫'">
+    <div class="sp-top">Приложение karavanvoda.ru грузится, пожалуйста подождите</div>
+    <div class="sp-load"><span></span></div>
+    <div class="sp-bottom">Это займёт не больше пару секунд</div>
+</div>
+
+
+<div class="toast-container" id="toastContainer"></div>
+<div class="sync-badge" id="syncBadge">☁️ Синхронизация…</div>
+
+<div id="notifPanel" class="notif-panel" style="display:none"></div>
+
+
+<div class="app">
+    <div class="header">
+        <div class="header-content">
+            <div class="top-bar">
+                <button class="top-btn" id="themeBtn" onclick="toggleTheme()">🌙</button>
+                <div class="online-pill" id="onlinePill" title="Диагностика связи — нажми" style="cursor:pointer" onclick="showSyncDiag()"><span class="status-dot"></span> <span id="onlineText">Онлайн 🟢 0</span></div>
+                <button class="top-btn" onclick="toggleNotifs()" id="notifBtn">🔔</button>
+            </div>
+            <div class="logo-container">
+                <div class="logo-icon"><img src="https://static.tildacdn.com/tild3461-6461-4666-b138-653933353666/pic-01-tiny.png" alt="" onerror="this.outerHTML='🐫'"></div>
+                <h1>КАРАВАН</h1>
+            </div>
+            <p>Доставка воды премиум качества</p>
+        </div>
+    </div>
+
+
+    <div class="nav" id="mainNav">
+        <button onclick="showPage('home')" class="active"><span class="nav-icon">🏠</span><span class="nav-label">Главная</span></button>
+        <button onclick="showPage('order')"><span class="nav-icon">📦</span><span class="nav-label">Заказ</span></button>
+        <button onclick="showPage('history')"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
+        <button onclick="showPage('people')" class="nav-staff"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
+        <button onclick="showPage('chats')" class="nav-staff"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
+        <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
+        <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
+    </div>
+
+
+    <div id="home" class="page active">
+        <h2>Добро пожаловать!</h2>
+        <div id="loginStatus" class="info-block" style="text-align:center"></div>
+        <div class="company-post">
+            <div class="pin">📌</div>
+            <span class="badge-co">🏢 Компания Караван</span>
+            <p>С 9 утра до 12 дня ваши заявки принимаются, и вам начисляются баллы за заранее созданный заказ — <strong>5 баллов</strong>. После 12 дня баллы не начисляются. После рабочего дня (5 вечера) заказы не принимаются.</p>
+            <div class="sign">С уважением, команда Караван</div>
+        </div>
+        <div id="announcementsHome"></div>
+        <div class="info-block" id="mirrorBlock" style="display:none">
+            <p>🚀 <strong>Приложение медленно грузится без VPN?</strong></p>
+            <p style="font-size:12px">1. В настройках WebToApp выключи прокси — выбери режим <strong>Direct</strong> (ошибка ERR_REDIRECT_LOOP бывает из-за прокси).<br>2. Надёжный способ: открой сайт в Chrome → меню ⋮ → «Добавить на главный экран» — будет как приложение.<br>3. Самый надёжный: разместить приложение на твоём сайте karavanvoda.ru (Tilda) — скажи мне, я подготовлю версию для вставки.</p>
+        </div>
+        <div class="feature-grid">
+            <div class="feature-card" onclick="showPage('order')"><div class="feature-icon">🚚</div><div class="feature-title">Быстрая доставка</div><div class="feature-desc">В течение 2 часов</div></div>
+            <div class="feature-card"><div class="feature-icon">💎</div><div class="feature-title">Чистая вода</div><div class="feature-desc">Родник «Кара-Су»</div></div>
+            <div class="feature-card"><div class="feature-icon">💰</div><div class="feature-title">Лучшие цены</div><div class="feature-desc">От 150₽</div></div>
+            <div class="feature-card"><div class="feature-icon">⭐</div><div class="feature-title">5000+ клиентов</div><div class="feature-desc">Доверяют нам</div></div>
+        </div>
+        <div class="info-block">
+            <p>📞 <strong>Заявки:</strong> 8 (964) 005-32-82</p>
+            <p>📞 <strong>Жалобы:</strong> 8 (964) 004-28-27</p>
+            <p>⏰ <strong>Режим:</strong> Ежедневно 9:00–17:00</p>
+        </div>
+        <button class="btn btn-primary" onclick="showPage('order')">📦 Заказать онлайн</button>
+        <button class="btn btn-success" onclick="callPhone()">📞 Заказать по телефону</button>
+    </div>
+
+
+    <div id="order" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>Оформление заказа</h2>
+        <div id="orderStepsPreview">
+            <div class="order-step" data-step="1"><div class="order-step-num">1</div><div class="order-step-text">Выберите товары</div></div>
+            <div class="order-arrow">↓</div>
+            <div class="order-step" data-step="2"><div class="order-step-num">2</div><div class="order-step-text">Укажите адрес</div></div>
+            <div class="order-arrow">↓</div>
+            <div class="order-step" data-step="3"><div class="order-step-num">3</div><div class="order-step-text">Подтвердите заказ</div></div>
+        </div>
+        <div id="orderTabProducts" class="order-tab" data-step="1">
+            <h3>Выберите товар</h3>
+            <div class="product-carousel" id="productCarousel">
+                <div class="product-track" id="productTrack"></div>
+            </div>
+            <div class="carousel-dots" id="carouselDots"></div>
+            <div class="carousel-hint">👈 Листайте влево-вправо 👉</div>
+            <div class="form-row" style="margin-top:12px">
+                <div class="form-group" style="margin-bottom:0"><label>Количество</label><input type="number" id="quantity" value="1" min="1" max="50"></div>
+                <div class="form-group" style="display:flex;align-items:flex-end;margin-bottom:0"><button class="btn btn-primary" onclick="addToCart()" style="margin:0">➕ В корзину</button></div>
+            </div>
+            <div id="cartPreview"></div>
+            <button class="btn btn-success" onclick="goToAddress()">📍 Далее: указать адрес →</button>
+            <button class="btn btn-warning btn-sm" onclick="openCalculator()">🧮 Калькулятор</button>
+        </div>
+        <div id="orderTabAddress" class="order-tab" data-step="2" style="display:none">
+            <h3>Укажите адрес</h3>
+            <div class="form-group"><label>Улица *</label><input type="text" id="street" placeholder="ул. Ленина"></div>
+            <div class="form-row"><div class="form-group"><label>Дом *</label><input type="text" id="house" placeholder="№"></div><div class="form-group"><label>Подъезд</label><input type="text" id="entrance" placeholder="№"></div></div>
+            <div class="form-row"><div class="form-group"><label>Этаж *</label><input type="number" id="floor" value="1" min="1" max="30"></div><div class="form-group"><label>Квартира *</label><input type="text" id="apartment" placeholder="№"></div></div>
+            <div class="form-group"><label>Домофон</label><input type="text" id="doorCode" placeholder="Код"></div>
+            <div class="form-group"><label>Время доставки</label><select id="deliveryTime"><option value="asap">Как можно скорее</option><option value="morning">9:00–12:00</option><option value="afternoon">12:00–15:00</option><option value="evening">15:00–17:00</option></select></div>
+            <div class="form-group"><label>Пожелания к заказу (обязательно сохраняется)</label><textarea id="orderComment" rows="3" placeholder="Например: позвонить за 10 минут, оставить у двери..."></textarea></div>
+            <div class="info-block warning">🏢 Этаж выше 2-го: +50₽ за бутыль</div>
+            <button class="btn btn-success" onclick="goToConfirm()">✅ Далее: подтвердить заказ →</button>
+        </div>
+        <div id="orderTabConfirm" class="order-tab" data-step="3" style="display:none">
+            <h3>Подтверждение заказа</h3>
+            <div id="cart"></div>
+            <div class="divider"></div>
+            <div class="form-group"><label>Промокод</label><div class="promo-input"><input type="text" id="promoCode" placeholder="Код"><button class="promo-btn" onclick="applyPromo()">OK</button></div></div>
+            <div id="promoStatus"></div>
+            <div id="bonusInfo"></div>
+            <h3 style="margin-top:20px">Способ оплаты</h3>
+            <div class="payment-method">
+                <div class="payment-option selected" onclick="selectPayment('card')" data-method="card"><div class="icon">💳</div><div class="label">Картой</div></div>
+                <div class="payment-option" onclick="selectPayment('cash')" data-method="cash"><div class="icon">💵</div><div class="label">Наличными</div></div>
+            </div>
+            <div class="price" id="total">Итого: 0 ₽</div>
+            <button class="btn btn-success" onclick="submitOrder()">✅ Оформить заказ</button>
+        </div>
+        <div id="orderMessage"></div>
+    </div>
+
+
+    <div id="history" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>История заказов</h2>
+        <div id="ordersContainer"></div>
+    </div>
+
+
+    <div id="people" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>👥 Люди</h2>
+        <div id="peopleContent"></div>
+    </div>
+
+
+    <div id="chats" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>💬 Чаты</h2>
+        <div id="chatsContent"></div>
+    </div>
+
+
+    <div id="profile" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>Мой профиль</h2>
+        <div id="profileContent"></div>
+    </div>
+
+
+    <div id="loginForm" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>Вход</h2>
+        <div id="loginError" class="info-block danger" style="display:none"></div>
+        <div class="form-group"><label>Телефон</label><input type="tel" id="loginPhone" placeholder="+7 XXX XXX-XX-XX"></div>
+        <div class="form-group"><label>Пароль</label><input type="password" id="loginPassword" placeholder="Пароль"></div>
+        <button class="btn btn-primary" onclick="login()">🔐 Войти</button>
+        <div class="divider"></div>
+        <button class="btn btn-outline" onclick="showPage('registerForm')">📝 Регистрация</button>
+    </div>
+
+
+    <div id="registerForm" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>Регистрация</h2>
+        <div id="regError" class="info-block danger" style="display:none"></div>
+        <div class="form-group"><label>Имя *</label><input type="text" id="regName" placeholder="Ваше имя"></div>
+        <div class="form-group"><label>Телефон *</label><input type="tel" id="regPhone" placeholder="XXXXXXXXXX или +7XXXXXXXXXX"></div>
+        <div class="form-group"><label>Дата рождения * (ДД.ММ.ГГГГ)</label><input type="text" id="regBirth" placeholder="24.08.2006" maxlength="10"></div>
+        <div class="form-group"><label>Пароль * (мин. 6)</label><input type="password" id="regPassword" placeholder="Минимум 6 символов"></div>
+        <div class="form-group"><label>Пол *</label>
+            <div class="gender-select">
+                <div class="role-option selected" onclick="selectGender('male')" data-gender="male"><span class="role-icon">♂</span>Мужской</div>
+                <div class="role-option" onclick="selectGender('female')" data-gender="female"><span class="role-icon">♀</span>Женский</div>
+            </div><input type="hidden" id="regGender" value="male">
+        </div>
+        <div class="form-group"><label>Тип</label>
+            <div class="role-select">
+                <div class="role-option selected" onclick="selectRole('client')" data-role="client"><span class="role-icon">🛃</span>Клиент</div>
+                <div class="role-option" onclick="selectRole('worker')" data-role="worker"><span class="role-icon">🚚</span>Курьер</div>
+                <div class="role-option" onclick="selectRole('admin')" data-role="admin"><span class="role-icon">⭐</span>Админ</div>
+            </div><input type="hidden" id="regRole" value="client">
+        </div>
+        <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="regPrivacy" style="width:18px;height:18px;accent-color:var(--primary)">Согласен на обработку данных</label></div>
+        <button class="btn btn-primary" onclick="register()">✅ Зарегистрироваться</button>
+    </div>
+
+
+    <div id="editProfile" class="page">
+        <button class="btn btn-back" onclick="showPage('profile')">← Назад</button>
+        <h2>✏️ Редактирование</h2>
+        <div class="edit-avatar" id="editAvatar" onclick="avatarPick()" style="cursor:pointer">?<div class="av-cam">📷</div></div>
+        <input type="file" id="avatarInput" accept="image/*" style="display:none">
+        <p style="text-align:center;font-size:11px;color:var(--text-secondary);margin:-8px 0 12px">Нажми на аватар, чтобы загрузить фото</p>
+        <div class="form-group"><label>Имя</label><input type="text" id="editName"></div>
+        <div class="form-group"><label>Новый пароль</label><input type="password" id="editPassword"></div>
+        <div class="form-group" id="editBirthGroup" style="display:none"><label>Дата рождения (только админ/создатель)</label><input type="text" id="editBirth" placeholder="ДД.ММ.ГГГГ" maxlength="10"></div>
+        <button class="btn btn-primary" onclick="saveProfileEdit()">💾 Сохранить</button>
+        <div class="divider"></div>
+        <button class="btn btn-danger" onclick="confirmDeleteAccount()">🗑️ Удалить аккаунт</button>
+    </div>
+
+
+    <div id="about" class="page">
+        <button class="btn btn-back" onclick="showPage('home')">← Назад</button>
+        <h2>О компании</h2>
+        <img class="about-logo" src="https://karavanvoda.ru/wp-content/uploads/2024/01/cropped-favicon-192x192.png" alt="КАРАВАН" onerror="this.style.display='none'">
+        <div class="info-block"><p style="font-size:14px;line-height:1.6"><strong>«КАРАВАН»</strong> — чистая вода с доставкой на дом. Родник «Кара-Су» — залог качества.</p></div>
+        <h3>Цены</h3>
+        <div class="info-block">
+            <p>🫗 Первая бутыль: <strong>600₽</strong></p>
+            <p>🔄 Замена бутыли: <strong>150₽</strong></p>
+            <p>💪 Помпа механическая: <strong>400₽</strong></p>
+            <p>⚡ Помпа электронная: <strong>500₽</strong></p>
+            <p>👑 Помпа VIP: <strong>600₽</strong></p>
+            <p>🏢 Этаж выше 2-го: <strong>+50₽</strong>/бут.</p>
+        </div>
+        <h3>Контакты</h3>
+        <div class="info-block">
+            <p>📞 8 (964) 005-32-82 — Заявки</p>
+            <p>📞 8 (964) 004-28-27 — Жалобы</p>
+            <p>✉️ karavan_voda@mail.ru</p>
+            <p>📍 г. Дербент, Фермерский туп. 7</p>
+        </div>
+    </div>
+
+
+    <div id="adminPanel" class="page">
+        <button class="btn btn-back" onclick="showPage('profile')">← Назад</button>
+        <h2>⭐ Администратор</h2>
+        <div class="admin-section"><button class="btn btn-danger" onclick="clearAllData()">🗑️ ПОЛНАЯ ОЧИСТКА БАЗЫ</button></div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">📢 Объявления <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div class="form-group"><label>Заголовок</label><input type="text" id="annTitle" placeholder="Например: Мы не работаем 1 сентября"></div>
+                <div class="form-group"><label>Текст</label><textarea id="annText" rows="3" placeholder="Подробности..."></textarea></div>
+                <div class="form-row"><div class="form-group"><label>📅 Публиковать с</label><input type="datetime-local" id="annStart"></div><div class="form-group"><label>🗑️ Авто-удалить</label><input type="datetime-local" id="annEnd"></div></div>
+                <button class="btn btn-primary btn-sm" onclick="createAnnouncement()">📢 Опубликовать</button>
+                <div class="divider"></div>
+                <div id="announcementsList"></div>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">📊 Статистика <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content"><div class="stats-grid">
+                <div class="stat-card"><div class="stat-value" id="statOrders">0</div><div class="stat-label">Заказов</div></div>
+                <div class="stat-card"><div class="stat-value" id="statUsers">0</div><div class="stat-label">Людей</div></div>
+                <div class="stat-card"><div class="stat-value" id="statRevenue">0₽</div><div class="stat-label">Доход</div></div>
+                <div class="stat-card"><div class="stat-value" id="statPending">0</div><div class="stat-label">Ожидают</div></div>
+                <div style="grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('orders')">⟲ Заказы</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('users')">⟲ Люди</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('revenue')">⟲ Доход</button>
+                    <button class="ua-btn" style="background:#fee2e2;color:var(--danger);flex:1" onclick="resetStat('pending')">⟲ Ожидают</button>
+                </div>
+            </div></div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">📦 Заказы <span class="collapsible-arrow">▼</span></div><div class="collapsible-content"><div id="adminOrders"></div></div></div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🗺️ Карта доставок <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div class="info-block"><p>📍 Отслеживание курьеров на карте г. Дербент</p></div>
+                <iframe src="https://yandex.ru/map-widget/v1/?ll=48.2905%2C42.0678&z=12&l=map" width="100%" height="300" frameborder="0" allowfullscreen="true" style="border:0;border-radius:12px" loading="lazy"></iframe>
+                <div id="courierPins" style="margin-top:15px"></div>
+                <a href="https://yandex.ru/maps/?text=Дербент" target="_blank" class="btn btn-primary btn-sm" style="margin-top:10px;text-decoration:none">🗺️ Открыть Яндекс.Карты</a>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">👥 Пользователи <span class="collapsible-arrow">▼</span></div><div class="collapsible-content"><div id="adminUsers"></div></div></div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🎁 Обмен баллов <span class="collapsible-arrow">▼</span></div><div class="collapsible-content"><div id="bonusRequests"></div></div></div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🔇 Заглушить <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div class="form-group"><label>ID пользователя</label><input type="text" id="muteUserId" placeholder="12 символов"></div>
+                <div class="form-group"><label>Причина</label><input type="text" id="muteReason"></div>
+                <div class="form-row"><div class="form-group"><label>📅 Начать с</label><input type="datetime-local" id="muteFrom"></div><div class="form-group"><label>🚫 До (дата и время)</label><input type="datetime-local" id="muteUntil"></div></div>
+                <div class="btn-row"><button class="btn btn-danger btn-sm" onclick="muteUser()">🔇 Заглушить</button><button class="btn btn-success btn-sm" onclick="unmuteUser()">🔊 Снять</button></div>
+                <div id="mutedList" style="margin-top:10px"></div>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🛒 Товары <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div id="adminProducts"></div>
+                <div class="form-group"><label>Название</label><input id="npName" placeholder="Вода 5л"></div>
+                <div class="form-row"><div class="form-group"><label>Цена ₽</label><input type="number" id="npPrice" min="1" placeholder="200"></div><div class="form-group"><label>Это бутыль?</label><select id="npBottle"><option value="no">Нет</option><option value="yes">Да</option></select></div></div>
+                <div class="form-group"><label>Фото (ссылка, необязательно)</label><input id="npImg" placeholder="https://..."></div>
+                <div class="form-group"><label>Описание</label><input id="npDesc" placeholder="Описание товара"></div>
+                <button class="btn btn-primary btn-sm" onclick="addProduct()">➕ Добавить товар</button>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🏷️ Скидки <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div id="discountList"></div>
+                <div class="form-group"><label>Товар</label><select id="discountProduct"><option value="bottle_first">Бутыль (первая)</option><option value="bottle_repeat">Замена</option><option value="pump_mech">Помпа мех.</option><option value="pump_elec">Помпа эл.</option><option value="pump_vip">Помпа VIP</option></select></div>
+                <div class="form-group"><label>Скидка %</label><input type="number" id="discountPct" min="1" max="99" placeholder="10"></div>
+                <div class="btn-row"><button class="btn btn-warning btn-sm" onclick="applyDiscount()">🏷️ Применить</button><button class="btn btn-gray btn-sm" onclick="removeAllDiscounts()">Убрать все</button></div>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">🎟️ Промокоды <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div id="promoList"></div>
+                <div class="form-group"><label>Код</label><input type="text" id="newPromoCode" placeholder="SALE20"></div>
+                <div class="form-row"><div class="form-group"><label>Скидка</label><input type="number" id="newPromoValue" min="1" placeholder="10"></div><div class="form-group"><label>Тип</label><select id="newPromoType"><option value="percent">%</option><option value="fixed">₽</option></select></div></div>
+                <button class="btn btn-primary btn-sm" onclick="createPromo()">➕ Создать</button>
+            </div>
+        </div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">📄 Накладные <span class="collapsible-arrow">▼</span></div>
+            <div class="collapsible-content">
+                <div class="form-group"><label>Клиент</label><select id="wbClient"><option value="">—</option></select></div>
+                <div class="form-group"><label>Курьер</label><select id="wbCourier"><option value="">—</option></select></div>
+                <button class="btn btn-primary btn-sm" onclick="generateWaybill()">📄 Сформировать</button>
+                <div id="waybillOut" style="margin-top:15px"></div>
+                <div id="waybillActions" style="display:none;margin-top:10px"><button class="btn btn-success btn-sm" onclick="downloadWaybillPDF()">🖨️ Скачать PDF</button></div>
+            </div>
+        </div>
+        <div class="admin-section"><div class="info-block" style="text-align:center;font-size:12px">💬 Просмотр всех чатов временно отключён</div></div>
+        <div class="admin-section"><div class="collapsible-header" onclick="toggleCollapse(this)">⚠️ Жалобы на курьеров <span class="collapsible-arrow">▼</span></div><div class="collapsible-content"><div id="adminComplaints"></div></div></div>
+    </div>
+
+
+    <footer>
+        <p><strong>© 2023 КАРАВАН</strong></p>
         <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v48</p>
     </footer>
 </div>
@@ -915,7 +2220,7 @@ function fbReauth(){
     fbReauthBusy=fbSignup().catch(function(){return fbSignupProxy()}).then(function(){fbReauthBusy=null;return true}).catch(function(){fbReauthBusy=null;if(FB_SECRET){fbSetTokMode('secret');return true}return false});
     return fbReauthBusy;
 }
-var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0;
+var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0,hbLastOk=0,hbFailN=0;
 var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
 function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
 function fbTryGoogleAuth(){if(!FB_KEY)return Promise.resolve(null);var p=fbSignup().catch(function(){return fbSignupProxy()}).then(function(tok){if(tok){fbSetTokMode('');return tok}throw new Error('noauth')});p.catch(function(){});return p}
