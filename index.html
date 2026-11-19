@@ -714,7 +714,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v50</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v51</p>
     </footer>
 </div>
 
@@ -1318,7 +1318,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v50</b></div>'
+    +'<div>Версия приложения: <b>v51</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1346,13 +1346,13 @@ function publishPresence(){
     var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
     DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
     var hbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
-    /* v49: каскад пульса direct→прокси→релей — иначе устройства не видят друг друга без VPN */
+    /* v51: пульс всегда пишется через секрет (Google-токен мерет без VPN) */ /* v49: каскад пульса direct→прокси→релей — иначе устройства не видят друг друга без VPN */
     if(!FB_DB){mirrorPush(JSON.stringify(DB),false);return;}
-    var hbP=KV+'/hb/'+CU.id+'.json',hbBody=JSON.stringify(v);var hbOk=false;
-    (hbDown?Promise.reject(new Error('hbdown')):fetchT(hbP+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:hbBody},8000).then(function(r){if(r&&r.status>=400)throw new Error('hb http'+r.status)}))
+    var hbP=KV+'/hb/'+CU.id+'.json',hbBody=JSON.stringify(v),hbSfx=FB_SECRET?'?auth='+encodeURIComponent(FB_SECRET):fbWriteSuffix();var hbOk=false;
+    (hbDown?Promise.reject(new Error('hbdown')):fetchT(hbP+hbSfx,{method:'PUT',headers:{'Content-Type':'application/json'},body:hbBody},8000).then(function(r){if(r&&r.status>=400)throw new Error('hb http'+r.status)}))
     .then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0;fbMarkUp()})
     .catch(function(){return fbProxyPut(hbP,hbBody,'application/json').then(function(r){if(r&&r.status>=400)throw new Error('hbpx '+r.status);hbOk=true;hbLastOk=Date.now();hbFailN=0})})
-    .catch(function(){if(relayOk)return relaySend(hbP+fbWriteSuffix(),'PUT',hbBody).then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0})})
+    .catch(function(){if(relayOk)return relaySend(hbP+hbSfx,'PUT',hbBody).then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0})})
     .catch(function(){})
     .then(function(){tgPush();if(!hbOk){hbFailN++;mirrorPush(JSON.stringify(DB),false);if(hbFailN>=2&&fbTokMode!=='secret'&&FB_SECRET)fbSecretProbe().catch(function(){})}});
 }
