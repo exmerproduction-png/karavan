@@ -714,7 +714,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v49</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v50</p>
     </footer>
 </div>
 
@@ -882,6 +882,54 @@ function hbFetch(){
         if(document.getElementById('chatsContent'))renderChats();
     }).catch(function(){});
 }
+
+/* ================= v50: TELEGRAM-КАНАЛ ПРИСУТСТВИЯ (работает в РФ без VPN, CORS *) ================= */
+function tgApi(method,params){
+    return fetchT('https://api.telegram.org/bot'+TG_BOT+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params||{})},9000).then(function(r){
+        if(r&&r.status>=400)throw new Error('tg http '+r.status);return r.text();
+    }).then(function(t){var j=null;try{j=JSON.parse(t)}catch(e){};if(!j||!j.ok)throw new Error('tg api');return j.result});
+}
+function tgParse(desc){
+    if(!desc||String(desc).slice(0,4)!=='KV1;')return null;var out=[];var now=Date.now();
+    String(desc).slice(4).split(';').forEach(function(it){var f=it.split(',');if(f.length!==4)return;var e={id:parseInt(f[0],10)||0,ts:parseInt(f[1],10)||0,name:'',role:''};try{e.name=decodeURIComponent(f[2])}catch(e2){}try{e.role=decodeURIComponent(f[3])}catch(e2){}if(e.id&&e.ts&&now-e.ts<300000)out.push(e)});
+    return out;
+}
+function tgPack(){
+    var now=Date.now(),arr=[],p=DB.presence||{};
+    Object.keys(p).forEach(function(k){var e=p[k];if(e&&e.ts&&now-e.ts<300000)arr.push({id:parseInt(k,10)||0,ts:e.ts,name:e.name||'',role:e.role||''})});
+    if(CU&&!arr.some(function(x){return x.id===CU.id}))arr.push({id:CU.id,ts:now,name:CU.name||'',role:roleOf(CU)||'cl'});
+    arr.sort(function(a,b){if(a.id===CU.id)return -1;if(b.id===CU.id)return 1;return (b.ts||0)-(a.ts||0)});
+    var s='KV1',enc=encodeURIComponent;
+    for(var i=0;i<arr.length;i++){var x=arr[i],it=x.id+','+x.ts+','+enc(String(x.name)).slice(0,20)+','+enc(String(x.role)).slice(0,10);if(s.length+1+it.length>506)break;s+=';'+it}
+    return s;
+}
+function tgPush(){
+    if(!CU||tgBusy||Date.now()-tgLastPut<20000)return;tgBusy=1;
+    setTimeout(function(){
+        tgApi('getMyDescription',{}).then(function(res){
+            var cur=tgParse((res&&res.description)||'')||[];var now=Date.now(),map={};
+            cur.forEach(function(e){if(e.ts&&now-e.ts<300000)map[e.id]=e});
+            map[CU.id]={id:CU.id,ts:Date.now(),name:CU.name||'',role:roleOf(CU)||'cl'};
+            var list=Object.keys(map).map(function(k){return map[k]});
+            var p=DB.presence||{};list.forEach(function(e){var o=p[e.id];if(o&&o.ts>e.ts){e.ts=o.ts;e.name=o.name||e.name;e.role=o.role||e.role}});
+            var desc='KV1',enc=encodeURIComponent;list.sort(function(a,b){if(a.id===CU.id)return -1;if(b.id===CU.id)return 1;return (b.ts||0)-(a.ts||0)});
+            for(var i=0;i<list.length;i++){var x=list[i],it=x.id+','+x.ts+','+enc(String(x.name)).slice(0,20)+','+enc(String(x.role)).slice(0,10);if(desc.length+1+it.length>506)break;desc+=';'+it}
+            if(desc===((res&&res.description)||'')){tgLastOk=Date.now();return}
+            return tgApi('setMyDescription',{description:desc}).then(function(){tgLastOk=Date.now()});
+        }).then(function(){tgLastPut=Date.now();tgBusy=0}).catch(function(){tgBusy=0});
+    },400+Math.floor(Math.random()*900));
+}
+function tgPull(){
+    if(Date.now()-tgPullLast<7000+Math.floor(Math.random()*1500))return;tgPullLast=Date.now();
+    tgApi('getMyDescription',{}).then(function(res){
+        var cur=tgParse((res&&res.description)||'');if(!cur||!cur.length){tgLastOk=Date.now();return}
+        var now=Date.now(),ch=false;
+        cur.forEach(function(e){if(!e.ts||now-e.ts>=300000)return;var old=DB.presence[e.id]||null;
+            if(!old||(old.ts||0)<e.ts||(old.ts||0)>=now-e.ts&&e.id===(CU&&CU.id)&&false){var ne={ts:e.ts,name:e.name,role:e.role,ip:old?old.ip:'',city:old?old.city:''};DB.presence[e.id]=ne;ch=true}});
+        tgLastOk=Date.now();setOnlinePill();
+        if(ch){if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats()}
+    }).catch(function(){});
+}
 function fbMigrate(){
     if(!FB_DB)return Promise.resolve();
     return fbGetNode(KV+'/users',false).then(function(r){
@@ -916,6 +964,7 @@ function fbReauth(){
     return fbReauthBusy;
 }
 var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0,hbLastOk=0,hbFailN=0;
+var TG_BOT='9011920520:AAFApfRWigm7fcVmziUQXiosZM3Zc5nH1uM',tgLastOk=0,tgLastPut=0,tgPullLast=0,tgBusy=0;
 var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
 function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
 function fbTryGoogleAuth(){if(!FB_KEY)return Promise.resolve(null);var p=fbSignup().catch(function(){return fbSignupProxy()}).then(function(tok){if(tok){fbSetTokMode('');return tok}throw new Error('noauth')});p.catch(function(){});return p}
@@ -1166,7 +1215,7 @@ function pollOnce(){
     if(pollTick%5===2){jobs.push(fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).then(function(txt){if(txt&&txt.trim()&&txt.trim()!=='null'){try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}}).catch(function(){}));}
     Promise.all(jobs).catch(function(){}).then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
 }
-function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();},3000);}
+function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){if(saving)return;pollOnce();setOnlinePill();tgPull();},3000);}
 var liveSrc=null,liveOk=0,lastRefFetch=0;
 function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
 function startLive(){
@@ -1269,7 +1318,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v49</b></div>'
+    +'<div>Версия приложения: <b>v50</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1278,7 +1327,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
     +'<div>Офлайн-копия на устройстве: <b>'+(jGet('lastDB',null)?'✅ есть':'нет')+'</b></div>'
     +'<div>Ретранслятор на сайте: <b>'+(relayOk?'✅ работает (данные через твой домен)':'❌ нет')+'</b></div>'
-    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
+    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Telegram-канал: <b>'+(tgLastOk&&Date.now()-tgLastOk<60000?'✅ работает ('+Math.round((Date.now()-tgLastOk)/1000)+' сек назад)':(tgLastOk?'⚠️ давно':'—'))+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
     +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
     var old=document.getElementById('diagOv');if(old)old.remove();
@@ -1305,7 +1354,7 @@ function publishPresence(){
     .catch(function(){return fbProxyPut(hbP,hbBody,'application/json').then(function(r){if(r&&r.status>=400)throw new Error('hbpx '+r.status);hbOk=true;hbLastOk=Date.now();hbFailN=0})})
     .catch(function(){if(relayOk)return relaySend(hbP+fbWriteSuffix(),'PUT',hbBody).then(function(){hbOk=true;hbLastOk=Date.now();hbFailN=0})})
     .catch(function(){})
-    .then(function(){if(!hbOk){hbFailN++;mirrorPush(JSON.stringify(DB),false);if(hbFailN>=2&&fbTokMode!=='secret'&&FB_SECRET)fbSecretProbe().catch(function(){})}});
+    .then(function(){tgPush();if(!hbOk){hbFailN++;mirrorPush(JSON.stringify(DB),false);if(hbFailN>=2&&fbTokMode!=='secret'&&FB_SECRET)fbSecretProbe().catch(function(){})}});
 }
 function updateOpenChat(){var ov=document.getElementById('chatOverlay');if(!ov||!CU)return;var pid=parseInt(ov.dataset.partner,10);if(!pid)return;var cid=getChatId(CU.id,pid);var msgs=(DB.chats||{})[cid]||[];var mb=document.getElementById('chatMsgs');if(!mb)return;msgs.forEach(function(m){if(m.toId===CU.id&&!m.read){m.read=true;CHAT_READ[m.id]=1}});chatReadSave();var sig=msgs.length+':'+msgs.map(function(m){return m.id+(m.read?'r':'u')+(m.media?'m':'')}).join('|');if(sig===ov._chatSig)return;var firstTime=!ov._chatSig;ov._chatSig=sig;var atBottom=firstTime||mb.scrollHeight-mb.scrollTop-mb.clientHeight<80;mb.innerHTML=renderMsgs(msgs);if(atBottom)mb.scrollTop=mb.scrollHeight;}
 
