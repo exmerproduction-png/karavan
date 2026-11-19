@@ -724,7 +724,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v52</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v53</p>
     </footer>
 </div>
 
@@ -814,8 +814,8 @@ function ensureBlob(cb){
     }).catch(function(){if(cb)cb(false)});
 }
 function fbUrl(){return FB_DB.replace(/\/$/,'')}
-function fbAuthSuffix(){return fbTok?'&auth='+encodeURIComponent(fbTok):(FB_SECRET?'&auth='+encodeURIComponent(FB_SECRET):'')}
-function fbWriteSuffix(){return fbTok?'?auth='+encodeURIComponent(fbTok):(FB_SECRET?'?auth='+encodeURIComponent(FB_SECRET):'')}
+function fbAuthSuffix(){return FB_SECRET?'&auth='+encodeURIComponent(FB_SECRET):(fbTok?'&auth='+encodeURIComponent(fbTok):'')} /* v53: секрет-первым для чтений */
+function fbWriteSuffix(){return FB_SECRET?'?auth='+encodeURIComponent(FB_SECRET):(fbTok?'?auth='+encodeURIComponent(fbTok):'')} /* v53: секрет-первым — мёртвый securetoken больше не ломает записи */
 function fbSaveTok(j){fbTok=j.idToken||j.id_token;fbRef=j.refreshToken||j.refresh_token;fbTokExp=Date.now()+((parseInt(j.expiresIn||j.expires_in,10)||3600)-5)*1000;lsSet('fbTok',JSON.stringify(fbTok));lsSet('fbRef',JSON.stringify(fbRef));return fbTok}
 function fbSignup(){return fetchT('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'},5000).then(function(r){return r.json()}).then(function(j){if(!j.idToken)throw new Error((j.error&&j.error.message)||'auth');return fbSaveTok(j)})}
 function fbRefreshTok(){return fetchT('https://securetoken.googleapis.com/v1/token?key='+FB_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:fbRef})},6000).then(function(r){return r.json()}).then(function(j){if(!j.id_token)throw new Error('refresh');return fbSaveTok(j)}).catch(function(){if(!fbRef)throw new Error('noref');return fbRefreshProxy()})}
@@ -1008,9 +1008,8 @@ function fbProxyChats(){
         var need=[];
         Object.keys(idx).forEach(function(cid){if(String(cid).indexOf('_')<0)return;var pr=cid.split('_');
             if(+pr[0]!==CU.id&&+pr[1]!==CU.id)return;
-            if(String(idx[cid])===String(knownIdx[cid]||''))return;
             var cur=lastMsgTs((DB.chats||{})[cid]);
-            if(!cur||idx[cid]>=cur)need.push(cid);
+            if(!cur||String(idx[cid])!==String(knownIdx[cid]||'')){if(!cur||idx[cid]>=cur)need.push(cid)} /* v53: пустой локальный чат всегда подтягиваем — иначе после перезахода он выглядит пустым */
             knownIdx[cid]=idx[cid];});
         chatSeenSave();
         if(!need.length)return;
@@ -1052,7 +1051,7 @@ function saveSnapshot(){
 }
 function cloudLoad(cb){
     showSync(true);var done=false;var pRemote=null;var fed=false;
-    function finish(db,ok,trusted){if(done)return;done=true;if(db){DB=mergeDB(db);cloudReady=true;saveSnapshot();}showSync(false);ensureCreator();if(trusted&&db&&CU&&!findUserById(CU.id)&&!isCreator(CU)){CU=null;lsDel('CU');}if(cb)cb();if(pRemote){var pp=DB.presence||{};Object.keys(pRemote).forEach(function(k){var e=pRemote[k];if(e&&(!pp[k]||(pp[k].ts||0)<(e.ts||0)))pp[k]=e});DB.presence=pp;setOnlinePill();}if(!ok)cloudSave();}
+    function finish(db,ok,trusted){if(done)return;done=true;if(db){DB=mergeDB(db);try{var ld0=jGet('lastDB',null);if(ld0&&ld0.chats)DB=syncMerge(DB,{chats:ld0.chats})}catch(e){} /* v53: чаты мгновенно видны после перезахода — из локального снапшота */cloudReady=true;saveSnapshot();}showSync(false);ensureCreator();if(trusted&&db&&CU&&!findUserById(CU.id)&&!isCreator(CU)){CU=null;lsDel('CU');}if(cb)cb();if(pRemote){var pp=DB.presence||{};Object.keys(pRemote).forEach(function(k){var e=pRemote[k];if(e&&(!pp[k]||(pp[k].ts||0)<(e.ts||0)))pp[k]=e});DB.presence=pp;setOnlinePill();}if(!ok)cloudSave();}
     function feed(db,trusted){
         if(!db)return;
         if(done){try{applyRemote(mergeDB(db));ensurePhotos();}catch(e){}return;}
@@ -1331,7 +1330,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v52</b></div>'
+    +'<div>Версия приложения: <b>v53</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
