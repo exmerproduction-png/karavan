@@ -426,9 +426,9 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
     <div class="nav" id="mainNav">
         <button onclick="showPage('home')" class="active"><span class="nav-icon">🏠</span><span class="nav-label">Главная</span></button>
         <button onclick="showPage('order')"><span class="nav-icon">📦</span><span class="nav-label">Заказ</span></button>
-        <button onclick="showPage('history')"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
-        <button onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
-        <button onclick="showPage('chats')"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
+        <button onclick="showPage('history')" class="nav-auth"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
+        <button onclick="showPage('people')" class="nav-auth"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
+        <button onclick="showPage('chats')" class="nav-auth"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
         <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
     </div>
@@ -724,7 +724,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v56</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v57</p>
     </footer>
 </div>
 
@@ -1355,14 +1355,13 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v56</b></div>'
+    +'<div>Версия приложения: <b>v57</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
     +'<div>Firebase: <b>'+fbSt+'</b></div>'
     +'<div>Канал данных: <b>'+fbCh+'</b></div>'
     +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
-    +'<div>Офлайн-копия на устройстве: <b>'+(jGet('lastDB',null)?'✅ есть':'нет')+'</b></div>'
     +'<div>Ретранслятор на сайте: <b>'+(relayOk?'✅ работает (данные через твой домен)':'❌ нет')+'</b></div>'
     +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Telegram-канал: <b>'+(tgLastOk&&Date.now()-tgLastOk<60000?'✅ работает ('+Math.round((Date.now()-tgLastOk)/1000)+' сек назад)':(tgLastOk?'⚠️ давно':'—'))+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
@@ -1523,7 +1522,7 @@ function confirmDeleteAccount(){confirm2('Удалить аккаунт навс
 
 
 /* ================= ПРОФИЛЬ (с рейтингом курьера) ================= */
-function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});var act=document.querySelector('.page.active');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'&&act.id!=='people'&&act.id!=='chats'){showPage('home');}} /* v56: люди и чаты доступны всем */
+function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});document.querySelectorAll('.nav-auth').forEach(function(b){b.style.display=CU?'':'none'}); /* v57: люди/чаты/история только для зарегистрированных */var act=document.querySelector('.page.active');if(!CU&&act&&(act.id==='people'||act.id==='chats'||act.id==='history'))showPage('home');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'&&act.id!=='people'&&act.id!=='chats'){showPage('home');}/* v57 */} /* v56: люди и чаты доступны всем */
 function updateLoginStatus(){updateNav();var el=document.getElementById('loginStatus');if(!el)return;if(CU){var r=roleOf(CU);el.className='info-block success';el.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center"><span style="font-size:28px">'+roleIcon(r)+'</span><div style="text-align:left"><strong style="font-size:16px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<br><span style="font-size:11px">ID: '+CU.uid+'</span><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span>'+(myGeo?'<br><span style="font-size:10px">🌍 '+escHtml(myGeo.city||'')+'</span>':'')+'</div></div>';}else{el.className='info-block';el.innerHTML='<p style="text-align:center;font-size:15px">👋 Добро пожаловать!</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="showPage(\'loginForm\')">Войти</button><button class="btn btn-outline btn-sm" onclick="showPage(\'registerForm\')">Регистрация</button></div>';}}
 function updateProfileContent(){
     var el=document.getElementById('profileContent');if(!el)return;
