@@ -427,8 +427,8 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
         <button onclick="showPage('home')" class="active"><span class="nav-icon">🏠</span><span class="nav-label">Главная</span></button>
         <button onclick="showPage('order')"><span class="nav-icon">📦</span><span class="nav-label">Заказ</span></button>
         <button onclick="showPage('history')"><span class="nav-icon">📋</span><span class="nav-label">История</span></button>
-        <button onclick="showPage('people')" class="nav-staff"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
-        <button onclick="showPage('chats')" class="nav-staff"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
+        <button onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">Люди</span></button>
+        <button onclick="showPage('chats')"><span class="nav-icon">💬</span><span class="nav-label">Чаты</span></button>
         <button onclick="showPage('profile')"><span class="nav-icon">👤</span><span class="nav-label">Профиль</span></button>
         <button onclick="showPage('about')"><span class="nav-icon">ℹ️</span><span class="nav-label">О нас</span></button>
     </div>
@@ -724,7 +724,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v55</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v56</p>
     </footer>
 </div>
 
@@ -1114,10 +1114,11 @@ function doSave(){
         .concat(fbDown?[]:chChanged.map(function(cid){return fbGetNode(KV+'/chats/'+cid,false).then(function(r){return{cid:cid,v:r.v}}).catch(function(){return{cid:cid,v:undefined}})}))
         .concat((fbDown||wipeFresh)?[]:[fbGetNode(KV+'/wipe',false).then(function(r){return{wipe:r.v}}).catch(function(){return{wipe:undefined}})]);
     Promise.all(reads).then(function(res){
+        var failedCols={},failedChats={}; /* v56: провалившиеся чтения */
         res.forEach(function(r){
             try{
-                if(r.k!==undefined){if(r.v!==null&&r.v!==undefined){var pp={};pp[r.k]=r.v;DB=syncMerge(DB,pp)}}
-                else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}
+                if(r.k!==undefined){if(r.v!==null&&r.v!==undefined){var pp={};pp[r.k]=r.v;DB=syncMerge(DB,pp)}else if(r.v===undefined)failedCols[r.k]=1}
+                else if(r.cid!==undefined&&r.v){var pc={};pc[r.cid]=r.v;DB=syncMerge(DB,{chats:pc})}else if(r.cid!==undefined&&r.v===undefined)failedChats[r.cid]=1;
                 else if(r.wipe!==undefined&&r.wipe)applyWipe(r.wipe)
             }catch(e){}
         });
@@ -1128,12 +1129,12 @@ function doSave(){
         DB.users.forEach(function(u){if(u&&u.photo&&!fbDown){var ph=u.photo;hadWrites=true;
             writes.push(fetchT(KV+'/photos/'+u.uid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(ph)},10000).catch(function(){return fbProxyPut(KV+'/photos/'+u.uid+'.json',JSON.stringify(ph),'text/plain')}).then(function(){pushOk=true}).catch(function(){}));
             u.hasPhoto=1;delete u.photo;if(!PHOTO_CACHE[u.uid]){PHOTO_CACHE[u.uid]={d:ph,_t:Date.now()};photoCacheSave()}}});
-        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(!wipeFresh&&k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
+        changed.forEach(function(k){hadWrites=true;if(fbDown)return;if(failedCols[k])return; /* v56: чтение не подтвердилось — НЕ пишем (защита от затирания) */if(!wipeFresh&&k==='users'){if(!DB.users.length)return;var luN=0;try{var ldE=jGet('lastDB',null),uE=ldE&&ldE.users;if(Array.isArray(uE))luN=uE.filter(Boolean).length}catch(e){}if(luN&&DB.users.length<luN)return;} /* v56: users не пишем неполным списком */if(!wipeFresh&&k==='users'&&remoteUsersN&&DB.users.length<remoteUsersN)return;var body=JSON.stringify(DB[k]);
             writes.push(fetchT(kvPath(COLS[k])+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:body},10000)
                 .catch(function(){return fbProxyPut(kvPath(COLS[k]),body,'application/json')})
                 .then(function(){pushOk=true;fbMarkUp();SHADOW[COLS[k]]=body;return fetchT(KV+'/mt/'+COLS[k]+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'text/plain'},body:JSON.stringify(nowTs)},10000).catch(function(){return fbProxyPut(KV+'/mt/'+COLS[k]+'.json',JSON.stringify(nowTs),'text/plain')})})
                 .then(function(){seenMt[COLS[k]]=nowTs;seenMtSave()}).catch(function(){fbMarkDown()}))});
-        chChanged.forEach(function(cid){hadWrites=true;if(fbDown)return;var msgs=DB.chats[cid]||[];var mw=[];
+        chChanged.forEach(function(cid){hadWrites=true;if(fbDown)return;if(failedChats[cid])return; /* v56 */var msgs=DB.chats[cid]||[];var mw=[];
             msgs.forEach(function(m){if(m&&(m.img||m.video)&&!m.media){var mid='m'+(m.id||nowTs+Math.floor(Math.random()*9999));var mm={};if(m.img)mm.img=m.img;if(m.video)mm.video=m.video;
                 mw.push(fetchT(KV+'/media/'+mid+'.json'+fbWriteSuffix(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(mm)},15000).catch(function(){}));m.media=mid;delete m.img;delete m.video}});
             var body2=JSON.stringify(msgs);var lts=lastMsgTs(msgs)||nowTs;
@@ -1354,7 +1355,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v55</b></div>'
+    +'<div>Версия приложения: <b>v56</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1522,7 +1523,7 @@ function confirmDeleteAccount(){confirm2('Удалить аккаунт навс
 
 
 /* ================= ПРОФИЛЬ (с рейтингом курьера) ================= */
-function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});var act=document.querySelector('.page.active');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'){showPage('home');}}
+function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});var act=document.querySelector('.page.active');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'&&act.id!=='people'&&act.id!=='chats'){showPage('home');}} /* v56: люди и чаты доступны всем */
 function updateLoginStatus(){updateNav();var el=document.getElementById('loginStatus');if(!el)return;if(CU){var r=roleOf(CU);el.className='info-block success';el.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center"><span style="font-size:28px">'+roleIcon(r)+'</span><div style="text-align:left"><strong style="font-size:16px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<br><span style="font-size:11px">ID: '+CU.uid+'</span><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span>'+(myGeo?'<br><span style="font-size:10px">🌍 '+escHtml(myGeo.city||'')+'</span>':'')+'</div></div>';}else{el.className='info-block';el.innerHTML='<p style="text-align:center;font-size:15px">👋 Добро пожаловать!</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="showPage(\'loginForm\')">Войти</button><button class="btn btn-outline btn-sm" onclick="showPage(\'registerForm\')">Регистрация</button></div>';}}
 function updateProfileContent(){
     var el=document.getElementById('profileContent');if(!el)return;
