@@ -983,7 +983,7 @@ function fbReauth(){
     return fbReauthBusy;
 }
 var pxOk=0,lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastEvHb=0,hbLastOk=0,hbFailN=0;
-var TG_BOT='9011920520:AAFApfRWigm7fcVmziUQXiosZM3Zc5nH1uM',tgLastOk=0,tgLastPut=0,tgPullLast=0,tgBusy=0;lastTgEvt=0;
+var TG_BOT='9011920520:AAFApfRWigm7fcVmziUQXiosZM3Zc5nH1uM',tgLastOk=0,tgLastPut=0,tgPullLast=0,tgBusy=0,lastTgEvt=0; /* v59-fix: lastTgEvt объявлена в var — strict mode умирал при загрузке */
 var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
 function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
 function fbTryGoogleAuth(){if(!FB_KEY)return Promise.resolve(null);var p=fbSignup().catch(function(){return fbSignupProxy()}).then(function(tok){if(tok){fbSetTokMode('');return tok}throw new Error('noauth')});p.catch(function(){});return p}
