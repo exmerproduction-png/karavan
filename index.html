@@ -724,7 +724,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v57</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v58</p>
     </footer>
 </div>
 
@@ -738,8 +738,11 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 var DB_URL = 'https://textdb.dev/api/data/karavan-voda-db-7f3a9c2e';
 var REG_URL = 'https://textdb.dev/api/data/karavan-blob-reg-51bb6b';
 var BLOB_API = 'https://jsonblob.com/api/jsonBlob';
-var NTFY_URL = 'https://ntfy.sh';
-var NTFY_TOPIC = 'karavan-voda-51bb6b-live';
+/* v58: ntfy удалён полностью (в РФ работает только через VPN). Резервные эвент-каналы — textdb.dev, 36 шт., ротация */
+var EV_BASE = 'https://textdb.dev/api/data/karavan-voda-ev-';
+var EV_IDS = ['kv0a','kv1b','kv2c','kv3d','kv4e','kv5f','kv6g','kv7h','kv8i','kv9j','kv0k','kv1l','kv2m','kv3n','kv4o','kv5p','kv6q','kv7r','kv8s','kv9t','kv0u','kv1v','kv2w','kv3x','kv4y','kv5z','kv6a','kv7b','kv8c','kv9d','kv0e','kv1f','kv2g','kv3h','kv4i','kv5j'];
+var EV_URLS = EV_IDS.map(function(x){return EV_BASE + x + '-51bb6b'});
+var EV_N = EV_URLS.length, evIdx = 0, evPollIdx = 0, lastEvT = 0, evLastOk = 0;
 var blobId = jGet('blobId', null);
 var FB_DB = 'https://karavanvoda-default-rtdb.firebaseio.com';
 var FB_KEY = 'AIzaSyADH-y1RNjoQ_XYCgQxG8-_97oxZqS341w';
@@ -975,7 +978,7 @@ function fbReauth(){
     fbReauthBusy=fbSignup().catch(function(){return fbSignupProxy()}).then(function(){fbReauthBusy=null;return true}).catch(function(){fbReauthBusy=null;if(FB_SECRET){fbSetTokMode('secret');return true}return false});
     return fbReauthBusy;
 }
-var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastNtfyHb=0,hbLastOk=0,hbFailN=0;
+var lastFallback=0,fbFallbackLast=0,lastHbSent=0,lastEvHb=0,hbLastOk=0,hbFailN=0;
 var TG_BOT='9011920520:AAFApfRWigm7fcVmziUQXiosZM3Zc5nH1uM',tgLastOk=0,tgLastPut=0,tgPullLast=0,tgBusy=0;
 var fbDirectFail=jGet('fbDirectFail',0),fbFailStreak=jGet('fbFailStreak',0),fbTokMode=jGet('fbTokMode','')==='secret'?'secret':'';
 function fbSetTokMode(m){fbTokMode=m||'';try{if(fbTokMode)lsSet('fbTokMode',fbTokMode);else lsDel('fbTokMode')}catch(e){}}
@@ -1153,7 +1156,7 @@ function doSave(){
             return (ok?Promise.resolve(false):mirrorPush(finalPayload,true)).then(function(mok){
                 if(!ok&&mok)ok=true;
                 showSync(false);
-                if(ok){offlineWarned=false;setOnlinePill();saveSnapshot();ntfyPublish({type:'refresh',cols:changed});}
+                if(ok){offlineWarned=false;setOnlinePill();saveSnapshot();evPublish({type:'refresh',cols:changed});}
                 else{saveQueue.push(null);if(!offlineWarned){offlineWarned=true;toast('📶','Нет связи с облаком — переподключаюсь…','warning');}fbReauth();setTimeout(function(){if(saving)return;doSave()},10000);}
                 var cbs=saveQueue.slice();saveQueue=[];
                 cbs.forEach(function(c){if(c)c()});
@@ -1202,7 +1205,7 @@ function pollOnce(){
         if(FB_SECRET&&pollTick%3===1)fbGetNode(KV+'/mt',true).catch(function(){});
         if(pollTick%2)fbProxyPoll();
         if(pollTick%5===0)pollFallback();
-        if(pollTick%4===0)ntfyJsonPoll();
+        if(pollTick%4===0)evPoll();
         Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
         return;
     }
@@ -1226,7 +1229,7 @@ function pollOnce(){
         if(Date.now()-lastFallback>6000){lastFallback=Date.now();pollFallback();fbProxyPoll();}
         if(!fbWarned&&fbLastOk&&Date.now()-fbLastOk>15000){fbWarned=true;toast('☁️','Firebase недоступен — работаю через запасной канал','warning');}
     }));
-    if(!liveOk&&pollTick%4===0)ntfyJsonPoll();
+    if(pollTick%4===0)evPoll();
     if(CU){
         jobs.push(fbGetNode(KV+'/notifs/'+CU.id,true).then(function(r){if(r.nc||(r.status&&r.status>=400)||!r.v)return;var o={};o[CU.id]=r.v;applyRemote(mergeDB({_notifs:o}))}).catch(function(){}));
         jobs.push(fbGetNode(KV+'/dlg/'+CU.id,true).then(function(r){
@@ -1251,15 +1254,10 @@ function pollOnce(){
     Promise.all(jobs).catch(function(){}).then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
 }
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){pollOnce();setOnlinePill();tgPull();},3000);}
-var liveSrc=null,liveOk=0,lastRefFetch=0;
-function ntfyPublish(obj){try{fetchT(NTFY_URL+'/'+NTFY_TOPIC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)},5000).catch(function(){})}catch(e){}}
-function startLive(){
-    if(liveSrc||!window.EventSource)return;
-    try{
-        liveSrc=new EventSource(NTFY_URL+'/'+NTFY_TOPIC+'/sse');liveSrc.onopen=function(){liveOk=Date.now()};liveSrc.onerror=function(){liveOk=0};
-        liveSrc.onmessage=function(ev){var d=null;try{d=JSON.parse(ev.data)}catch(e){return}handleLiveMsg(d)};
-    }catch(e){liveSrc=null}
-}
+var lastRefFetch = 0;
+/* v58: эвент-канал на textdb.dev — 36 резервных каналов с ротацией (вместо ntfy) */
+function evPublish(obj){try{obj.t = obj.t || Date.now();var s = JSON.stringify({message: JSON.stringify(obj)});var tryN = 0;(function w(){var u = EV_URLS[evIdx % EV_N];evIdx++;tryN++;fetchT(u, {method:'POST', headers:{'Content-Type':'text/plain'}, body:s}, 7000).then(function(){evLastOk = Date.now()}).catch(function(){if(tryN < 4)setTimeout(w, 300)})})()}catch(e){}}
+function evPoll(){evPollIdx = (evPollIdx + 1) % EV_N;fetchT(EV_URLS[evPollIdx] + '?t=' + Date.now(), {}, 8000).then(function(r){return r.text()}).then(function(t){evLastOk = Date.now();if(!t || !t.trim() || t.trim() === 'null')return;var d = null;try{d = JSON.parse(t)}catch(e){return}if(!d || !d.message)return;var m = null;try{m = JSON.parse(d.message)}catch(e){return}if(!m || !m.type)return;if(!m.t || m.t > lastEvT){lastEvT = m.t || 0;handleLiveMsg(d)}}).catch(function(){})}
 /* v45: RTDB SSE realtime — свой живой канал прямо на firebaseio.com (работает без VPN) */
 var rtSrc=null,rtChat=null,rtOk=0,lastRtMt=0,lastRtEvt=0;
 function rtHandle(d){if(!d)return;try{pollOnce()}catch(e){}}
@@ -1301,8 +1299,6 @@ function handleLiveMsg(d){
                 } else if(m.type==='hb'&&m.id&&m.v&&m.id!==CU.id){var hp=DB.presence||{};if(!hp[m.id]||(hp[m.id].ts||0)<(m.v.ts||0)){hp[m.id]=m.v;DB.presence=hp;setOnlinePill();if(document.getElementById('peopleContent'))renderPeople();if(document.getElementById('chatsContent'))renderChats();}}else if(m.type==='refresh'){publishPresence();if(m.cols&&m.cols.length&&Date.now()-lastRefFetch>3000){lastRefFetch=Date.now();Promise.all(m.cols.map(function(ck){return (fbIsDown()?Promise.reject(new Error('down')):fbFetchCol(ck)).then(function(v){return[ck,v]}).catch(function(){return fbProxyGet(kvPath(COLS[ck])).then(function(v){return[ck,v]}).catch(function(){return[ck,undefined]})})})).then(function(rs){var partial={},ch=false;rs.forEach(function(x){if(x[1]!==null&&x[1]!==undefined){partial[x[0]]=x[1];ch=true}});if(ch){applyRemote(mergeDB(partial));ensurePhotos();}}).catch(function(){});}pollOnce();}
             }catch(e){}
 }
-var lastNtfyPoll=0,ntfySeen={};
-function ntfyJsonPoll(){var now=Date.now();if(now-lastNtfyPoll<15000)return;lastNtfyPoll=now;fetchT(NTFY_URL+'/'+NTFY_TOPIC+'/json?poll=1&since=2m',{},8000).then(function(r){return r.text()}).then(function(t){var ls=t.split('\n');for(var li=0;li<ls.length;li++){var line=ls[li];if(!line.trim())continue;try{var d=JSON.parse(line);if(d.event!=='message'||ntfySeen[d.id])continue;ntfySeen[d.id]=1;handleLiveMsg(d)}catch(e){}}var ks=Object.keys(ntfySeen);if(ks.length>200){for(var ki=0;ki<ks.length-100;ki++)delete ntfySeen[ks[ki]]}}).catch(function(){})}
 function ensureCreator(){
     var cp=normPhone(CREATOR.phone),found=false;
     for(var i=0;i<DB.users.length;i++){if(normPhone(DB.users[i].phone)===cp){if(!found){DB.users[i].name=CREATOR.name;DB.users[i].email=CREATOR.email;DB.users[i].birthDate=CREATOR.birthDate;DB.users[i].role='creator';found=true;}else{DB.users.splice(i,1);i--;}}}
@@ -1355,7 +1351,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v57</b></div>'
+    +'<div>Версия приложения: <b>v58</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
@@ -1363,7 +1359,7 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     +'<div>Канал данных: <b>'+fbCh+'</b></div>'
     +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
     +'<div>Ретранслятор на сайте: <b>'+(relayOk?'✅ работает (данные через твой домен)':'❌ нет')+'</b></div>'
-    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Живой канал ntfy: <b>'+(liveOk?'✅ подключён':'❌ нет связи')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Telegram-канал: <b>'+(tgLastOk&&Date.now()-tgLastOk<60000?'✅ работает ('+Math.round((Date.now()-tgLastOk)/1000)+' сек назад)':(tgLastOk?'⚠️ давно':'—'))+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
+    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Резервные каналы (36, textdb.dev): <b>'+(evLastOk&&Date.now()-evLastOk<90000?'✅ работают':'— тишина (нормально)')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Telegram-канал: <b>'+(tgLastOk&&Date.now()-tgLastOk<60000?'✅ работает ('+Math.round((Date.now()-tgLastOk)/1000)+' сек назад)':(tgLastOk?'⚠️ давно':'—'))+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
     +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
     var old=document.getElementById('diagOv');if(old)old.remove();
@@ -1380,7 +1376,7 @@ function fetchGeo(){
 function publishPresence(){
     if(!CU)return;
     var v={ts:Date.now(),ip:myIP||'',city:myGeo?myGeo.city:'',name:CU.name,role:roleOf(CU)};
-    DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastNtfyHb||0)>55000){lastNtfyHb=Date.now();ntfyPublish({type:'hb',id:CU.id,v:v});}
+    DB.presence[CU.id]=v;lastHbSent=Date.now();setOnlinePill();if(Date.now()-(lastEvHb||0)>55000){lastEvHb=Date.now();evPublish({type:'hb',id:CU.id,v:v});}
     var hbDown=fbIsDown()&&!(FB_SECRET&&fbTokMode==='secret');
     /* v51: пульс всегда пишется через секрет (Google-токен мерет без VPN) */ /* v49: каскад пульса direct→прокси→релей — иначе устройства не видят друг друга без VPN */
     if(!FB_DB){mirrorPush(JSON.stringify(DB),false);return;}
@@ -1406,7 +1402,7 @@ document.addEventListener('DOMContentLoaded',function(){
         if(CU){var f=findUserById(CU.id);if(f){CU=f;lsSet('CU',JSON.stringify(CU));}}
         setTimeout(function(){if(CU)cloudSave()},8000);
         setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},600)}},1500);
-        refreshAll();startPolling();startLive();startRtLive();publishPresence();hbFetch();
+        refreshAll();startPolling();startRtLive();publishPresence();hbFetch();
         setInterval(function(){if(rtSrc&&lastRtEvt&&Date.now()-lastRtEvt>90000){try{rtSrc.close();if(rtSrc._hbsrc)rtSrc._hbsrc.close()}catch(e){}rtSrc=null;startRtLive()}},30000);
         setInterval(publishPresence,30000);
         window.addEventListener('focus',function(){if(CU)publishPresence()});document.addEventListener('visibilitychange',function(){if(!document.hidden&&CU)publishPresence()});
@@ -1522,7 +1518,7 @@ function confirmDeleteAccount(){confirm2('Удалить аккаунт навс
 
 
 /* ================= ПРОФИЛЬ (с рейтингом курьера) ================= */
-function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});document.querySelectorAll('.nav-auth').forEach(function(b){b.style.display=CU?'':'none'}); /* v57: люди/чаты/история только для зарегистрированных */var act=document.querySelector('.page.active');if(!CU&&act&&(act.id==='people'||act.id==='chats'||act.id==='history'))showPage('home');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'&&act.id!=='people'&&act.id!=='chats'){showPage('home');}/* v57 */} /* v56: люди и чаты доступны всем */
+function updateNav(){var staff=!!CU&&(isAdmin(CU)||roleOf(CU)==='worker');var hid=false;document.querySelectorAll('.nav-staff').forEach(function(b){b.style.display=staff?'':'none'});document.querySelectorAll('.nav-auth').forEach(function(b){b.style.display=CU?'':'none'}); /* v57: люди/чаты/история только для зарегистрированных */var act=document.querySelector('.page.active');if(!CU&&act&&(act.id==='people'||act.id==='chats'||act.id==='history'))showPage('home');if(!staff&&act&&act.id!=='home'&&act.id!=='order'&&act.id!=='profile'&&act.id!=='about'&&act.id!=='loginForm'&&act.id!=='registerForm'&&act.id!=='editProfile'&&act.id!=='courierOrdersPage'&&act.id!=='courierWaybillsPage'&&act.id!=='people'&&act.id!=='chats'&&act.id!=='history'){showPage('home');} /* v58: история для всех залогиненных *//* v57 */} /* v56: люди и чаты доступны всем */
 function updateLoginStatus(){updateNav();var el=document.getElementById('loginStatus');if(!el)return;if(CU){var r=roleOf(CU);el.className='info-block success';el.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center"><span style="font-size:28px">'+roleIcon(r)+'</span><div style="text-align:left"><strong style="font-size:16px">'+escHtml(safeName(CU))+'</strong>'+(isCreator(CU)?' <span class="badge badge-gold">👑 Создатель</span>':'')+'<br><span style="font-size:11px">ID: '+CU.uid+'</span><br><span class="badge badge-primary">'+roleIcon(r)+' '+roleName(r)+'</span>'+(myGeo?'<br><span style="font-size:10px">🌍 '+escHtml(myGeo.city||'')+'</span>':'')+'</div></div>';}else{el.className='info-block';el.innerHTML='<p style="text-align:center;font-size:15px">👋 Добро пожаловать!</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="showPage(\'loginForm\')">Войти</button><button class="btn btn-outline btn-sm" onclick="showPage(\'registerForm\')">Регистрация</button></div>';}}
 function updateProfileContent(){
     var el=document.getElementById('profileContent');if(!el)return;
@@ -1740,7 +1736,7 @@ function doChatSearch(){var input=document.getElementById('chatSearch');if(!inpu
 function openChat(userId){if(!CU)return;var self=userId===CU.id;var partner=self?CU:findUserById(userId);if(!partner)return;var cid=getChatId(CU.id,userId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var msgs=DB.chats[cid];msgs.forEach(function(m){if(m.toId===CU.id){m.read=true;CHAT_READ[m.id]=1}});chatReadSave();cloudSave();var ov=document.createElement('div');ov.className='modal-overlay chat-ov';ov.id='chatOverlay';ov.dataset.partner=userId;ov.innerHTML='<div class="modal chat-full"><div class="modal-header"><div><div class="modal-title">'+(self?'⭐ Избранное':'💬 <span style="cursor:pointer" data-pv="'+(self?CU.id:userId)+'" onclick="viewProfileRef(this)">'+(photoOf(partner)?'<img src="'+photoOf(partner)+'" style="width:30px;height:30px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">':'')+escHtml(safeName(partner))+'</span>')+'</div><div style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">'+(self?'<span>Твои личные заметки — видны только тебе</span>':'<span>ID: '+partner.uid+'</span>'+roleChip(partner)+'<span>'+lastSeenText(userId)+'</span>')+'</div></div><button class="modal-close" onclick="closeChat()">✕</button></div><div class="chat-messages" id="chatMsgs">'+renderMsgs(msgs)+'</div><div class="chat-input-row"><button class="chat-btn photo" onclick="attachMedia('+userId+',\'img\')" title="Фото"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button><button class="chat-btn video" onclick="attachMedia('+userId+',\'video\')" title="Видео"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="3"/><path d="M16 10l6-3v10l-6-3"/></svg></button><input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key===\'Enter\')sendMsg('+userId+')"><button class="chat-btn send" onclick="sendMsg('+userId+')" title="Отправить"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div><input type="file" id="photoInput" accept="image/*" style="display:none"><input type="file" id="videoInput" accept="video/*" style="display:none"></div>';document.body.appendChild(ov);var mb=document.getElementById('chatMsgs');if(mb)mb.scrollTop=mb.scrollHeight;try{attachRtChat(cid)}catch(e){}}
 function renderMsgs(msgs){if(!msgs||!msgs.length)return'<div style="text-align:center;color:var(--text-secondary);font-size:13px;margin:auto">💬 Начните общение</div>';var out='',lastDay='';var today=new Date().toLocaleDateString('ru-RU'),yest=new Date(Date.now()-864e5).toLocaleDateString('ru-RU');msgs.forEach(function(m){var d=new Date(m.time),dk=d.toLocaleDateString('ru-RU');if(dk!==lastDay){lastDay=dk;out+='<div class="msg-day">'+(dk===today?'Сегодня':dk===yest?'Вчера':dk)+'</div>'}var own=m.fromId===CU.id,t=d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});var media='';if(m.video)media='<video src="'+m.video+'" controls preload="metadata" playsinline></video>';else if(m.img)media='<img src="'+m.img+'" class="msg-img" alt="Фото" onclick="openPhotoViewer(this)">';else if(m.media){var mc=MEDIA_CACHE[m.media];if(mc)media=mc.video?'<video src="'+mc.video+'" controls preload="metadata" playsinline></video>':'<img src="'+mc.img+'" class="msg-img" alt="Фото" onclick="openPhotoViewer(this)">';else{media='<div class="msg-media-load" style="cursor:pointer" onclick="loadMediaMsg(\''+m.media+'\')">📥 Загрузить фото</div>'}}var tick=own?'<span class="tick">'+(m.read?TICK2:TICK1)+'</span>':'';out+='<div class="chat-message '+(own?'own':'other')+'">'+(!own?'<div class="msg-sender" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px" data-pv="'+escHtml(String(m.fromId!==undefined&&m.fromId!==null?m.fromId:(m.fromName||m.from||'')))+'" onclick="viewProfileRef(this)" title="Открыть профиль">👤 '+escHtml(m.fromName||'?')+'</div>':'')+'<div class="msg-bubble">'+media+(m.text?'<div class="msg-text">'+escHtml(m.text).replace(/\n/g,'<br>')+'</div>':'')+'<div class="msg-time">'+t+tick+'</div></div></div>'});return out}
 function applyLiveMsg(nm){try{var cid=getChatId(nm.fromId,nm.toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];if(DB.chats[cid].some(function(x){return x.id===nm.id}))return;DB.chats[cid].push(nm);DB.chats[cid].sort(function(a,b){return new Date(a.time)-new Date(b.time)});var ov=document.getElementById('chatOverlay');if(ov&&parseInt(ov.dataset.partner,10)===nm.fromId){if(nm.toId===CU.id){nm.read=true;CHAT_READ[nm.id]=1;chatReadSave()}var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight}}showNotifDot();}catch(e){}}
-function sendMsg(toId,text,img,video){var inp=document.getElementById('chatInput');text=text||(inp?inp.value.trim():'');if((!text&&!img&&!video)||!CU)return;if(isMuted(CU)&&!isAdmin(CU)){toast('🔇','Вы заглушены — отправка запрещена','warning');return}var cid=getChatId(CU.id,toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var nm={id:Date.now()+'_'+Math.random().toString(16).slice(2,6),fromId:CU.id,fromName:CU.name,toId:toId,text:text||'',img:img||null,video:video||null,time:new Date().toISOString(),read:false};DB.chats[cid].push(nm);if(toId!==CU.id)pushNotif(toId,'💬 Новое сообщение',safeName(CU)+': '+(video?'🎥 Видео':(img?'📷 Фото':(text||'').slice(0,40))),'info');cloudSave();ntfyPublish({type:'msg',toId:toId,fromId:CU.id,fromName:safeName(CU),msg:{id:nm.id,fromId:nm.fromId,fromName:safeName(CU),toId:nm.toId,text:nm.text,time:nm.time}});if(inp)inp.value='';var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight;}}
+function sendMsg(toId,text,img,video){var inp=document.getElementById('chatInput');text=text||(inp?inp.value.trim():'');if((!text&&!img&&!video)||!CU)return;if(isMuted(CU)&&!isAdmin(CU)){toast('🔇','Вы заглушены — отправка запрещена','warning');return}var cid=getChatId(CU.id,toId);if(!DB.chats)DB.chats={};if(!DB.chats[cid])DB.chats[cid]=[];var nm={id:Date.now()+'_'+Math.random().toString(16).slice(2,6),fromId:CU.id,fromName:CU.name,toId:toId,text:text||'',img:img||null,video:video||null,time:new Date().toISOString(),read:false};DB.chats[cid].push(nm);if(toId!==CU.id)pushNotif(toId,'💬 Новое сообщение',safeName(CU)+': '+(video?'🎥 Видео':(img?'📷 Фото':(text||'').slice(0,40))),'info');cloudSave();evPublish({type:'msg',toId:toId,fromId:CU.id,fromName:safeName(CU),msg:{id:nm.id,fromId:nm.fromId,fromName:safeName(CU),toId:nm.toId,text:nm.text,time:nm.time}});if(inp)inp.value='';var mb=document.getElementById('chatMsgs');if(mb){mb.innerHTML=renderMsgs(DB.chats[cid]);mb.scrollTop=mb.scrollHeight;}}
 function processImage(file,cb){var r=new FileReader();r.onload=function(ev){var img=new Image();img.onload=function(){var max=900,w=img.width,h=img.height,k=Math.min(1,max/Math.max(w,h));var cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);cb(cv.toDataURL('image/jpeg',.7))};img.src=ev.target.result};r.readAsDataURL(file)}
 function attachMedia(toId,kind){var inp=document.getElementById(kind==='video'?'videoInput':'photoInput');if(!inp)return;inp.onchange=function(e){var f=e.target.files[0];if(!f)return;if(kind==='video'){if(f.size>4*1024*1024){toast('','Видео до 4 МБ — выберите короче или сожмите','error');inp.value='';return}var r=new FileReader();r.onload=function(ev){sendMsg(toId,'',null,ev.target.result);inp.value=''};r.onerror=function(){toast('','Не удалось прочитать видео','error')};r.readAsDataURL(f)}else{if(f.size>6*1024*1024){toast('','Файл слишком большой','error');inp.value='';return}processImage(f,function(d){sendMsg(toId,'',d)});inp.value=''}};inp.click()}
 function closeChat(){try{if(rtChat){rtChat.close();rtChat=null;}}catch(e){}var o=document.getElementById('chatOverlay');if(o)o.remove();renderChats();}
