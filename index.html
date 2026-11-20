@@ -724,7 +724,7 @@ body.dark .role-option:not(.selected){background:#0a1322;border-color:#22345c}
 
     <footer>
         <p><strong>© 2023 КАРАВАН</strong></p>
-        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v61</p>
+        <p style="margin-top:6px;opacity:.8">💧 Чистая вода — залог здоровья! · v62</p>
     </footer>
 </div>
 
@@ -1203,7 +1203,7 @@ function viewProfile(id){var u=findUserById(id);if(!u){toast('\ud83d\udc41','\u0
 function closeViewProfile(){var w=document.getElementById('pvOverlay');if(w)w.remove();}
 function refreshCU(){if(!CU)return;var uu=findUserById(CU.id);if(uu&&uu!==CU){CU=uu;try{lsSet('CU',JSON.stringify(CU))}catch(e){}}} /* v54: роль/адрес обновляются на всех устройствах сразу */
 function applyRemote(f){var m=syncMerge(DB,f);if(JSON.stringify(m)!==JSON.stringify(DB)){DB=m;ensureCreator();refreshCU();refreshAll();}}
-var pollTick=0,fbLastOk=0,fbWarned=false,pollBusy=false,lastPollMs=0;
+var pollTick=0,fbLastOk=0,fbWarned=false,pollBusy=false,lastPollMs=0,lastPingMs=0; /* v62: ping (только mt-read), lastPollMs = длительность всего цикла */
 function pollOnce(){
     if(saving||pollBusy||!FB_DB)return;
     pollBusy=true;var pollT0=Date.now();
@@ -1218,8 +1218,9 @@ function pollOnce(){
         Promise.resolve().then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
         return;
     }
-    var jobs=[];
+    var jobs=[];var pingT0=Date.now(); /* v62 */
     jobs.push(fbGetNode(KV+'/mt',true).then(function(r){
+        lastPingMs=Date.now()-pingT0;
         if(r.nc){fbLastOk=Date.now();fbWarned=false;return}
         if(r.status>=400)throw new Error('http'+r.status);
         fbLastOk=Date.now();fbWarned=false;
@@ -1262,7 +1263,7 @@ function pollOnce(){
     if(pollTick%5===1)hbPagePoll(); /* v60 */
     if(pollTick%5===3)cbPull(); /* v61: Codeberg-канал без VPN */ /* v60: пульс textdb без VPN */
     if(pollTick%6===3)jobs.push(fbFetchCol('users').then(function(uV){if(uV){if(Array.isArray(uV))applyRemote(mergeDB({users:uV}))}}).catch(function(){})); /* v59: юзеры тянутся сами, даже если mt-хук пропущен */
-    if(pollTick%5===2){jobs.push(fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).catch(function(){return pxText(DB_URL)}).then(function(txt){if(txt&&txt.trim()&&txt.trim()!=='null'){try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}}).catch(function(){}));}
+    if(pollTick%5===2){(fetchT(DB_URL+'?t='+Date.now(),{},8000).then(function(r){return r.text()}).catch(function(){return pxText(DB_URL)}).then(function(txt){if(txt&&txt.trim()&&txt.trim()!=='null'){try{applyRemote(mergeDB(JSON.parse(txt)))}catch(e){}}}).catch(function(){}));} /* v62: textdb вне барьера — не блокирует цикл опроса */
     Promise.all(jobs).catch(function(){}).then(function(){pollBusy=false;lastPollMs=Date.now()-pollT0});
 }
 function startPolling(){if(pollTimer)return;pollTimer=setInterval(function(){pollOnce();setOnlinePill();tgPull();},3000);}
@@ -1376,15 +1377,12 @@ function showSyncDiag(){var now=Date.now(),fbSt='нет данных',fbCh='—'
     var o=document.createElement('div');o.className='modal-overlay';o.id='diagOv';
     o.innerHTML='<div class="modal"><div class="modal-header"><span class="modal-title">🔍 Диагностика связи</span><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>'
     +'<div style="text-align:left;font-size:13px;line-height:2.1;margin:12px 0;color:var(--text-secondary)">'
-    +'<div>Версия приложения: <b>v61</b></div>'
+    +'<div>Версия приложения: <b>v62</b></div>'
     +'<div>Вы: <b>'+who+'</b></div>'
     +'<div>Пользователей загружено: <b>'+(DB.users?DB.users.length:0)+'</b></div>'
     +'<div>Доступ к базе: <b>'+(fbTokMode==='secret'?'⚡ резервный (секрет) — без VPN':'основной (Google-token)')+'</b></div>'
-    +'<div>Firebase: <b>'+fbSt+'</b></div>'
-    +'<div>Канал данных: <b>'+fbCh+'</b></div>'
     +'<div>Прямой доступ Firebase: <b>'+(fbIsDown()?'❌ заблокирован — авто-обход включён':'✅ работает')+'</b></div>'
-    +'<div>Ретранслятор на сайте: <b>'+(relayOk?'✅ работает (данные через твой домен)':'❌ нет')+'</b></div>'
-    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>Резервные каналы (36, textdb.dev): <b>'+(evLastOk&&Date.now()-evLastOk<90000?'✅ работают':'— тишина (нормально)')+'</b></div>'+'<div>Пульс без VPN (textdb): <b>'+(hbPageOk&&Date.now()-hbPageOk<120000?'✅ работает':'— тишина')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Telegram-канал: <b>'+(tgLastOk&&Date.now()-tgLastOk<60000?'✅ работает ('+Math.round((Date.now()-tgLastOk)/1000)+' сек назад)':(tgLastOk?'⚠️ давно':'—'))+'</b></div>'+'<div>Прокси-каналы: <b>'+(pxOk&&Date.now()-pxOk<90000?'\u2705 работают':'\u2014 не потребовались')+'</b></div>'+'<div>Скорость опроса: <b>'+(lastPollMs?lastPollMs+' мс':'—')+'</b></div>'
+    +'<div>Мой пульс: <b>'+hb+'</b></div>'+'<div>Пульс записан в базу: <b>'+(hbLastOk?(Date.now()-hbLastOk<25000?'✅ да ('+Math.round((Date.now()-hbLastOk)/1000)+' сек назад)':'⚠️ давно: '+Math.round((Date.now()-hbLastOk)/60000)+' мин'):'❌ ни разу')+'</b></div>'+'<div>RTDB-стрим: <b>'+(rtOk&&Date.now()-rtOk<120000?'✅ работает':'— нет')+'</b></div>'+'<div>Прокси-каналы: <b>'+(pxOk&&Date.now()-pxOk<90000?'\u2705 работают':'\u2014 не потребовались')+'</b></div>'+'<div>Пинг Firebase: <b>'+(lastPingMs?Math.round(lastPingMs)+' мс':'—')+'</b></div>'
     +'<div>Онлайн сейчас: <b>'+countOnline()+'</b></div>'
     +'</div><button class="btn btn-primary" onclick="publishPresence();hbFetch();this.closest(\'.modal-overlay\').remove()">🔄 Обновить статус</button><button class="btn btn-danger" style="margin-top:8px" onclick="hardResetCache()">🗑 Сбросить кэш устройства</button></div>';
     var old=document.getElementById('diagOv');if(old)old.remove();
